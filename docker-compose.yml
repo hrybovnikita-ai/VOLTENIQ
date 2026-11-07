@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: volteniq-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: volteniq
+      POSTGRES_PASSWORD: volteniq
+      POSTGRES_DB: volteniq
+    ports:
+      - "5432:5432"
+    volumes:
+      - volteniq_pg:/var/lib/postgresql/data
+
+volumes:
+  volteniq_pg:

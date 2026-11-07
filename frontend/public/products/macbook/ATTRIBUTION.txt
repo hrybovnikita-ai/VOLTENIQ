@@ -1,0 +1,34 @@
+VOLTENIQ MacBook demo images — sources & licenses
+=================================================
+
+All files were downloaded from Wikimedia Commons and are reused under
+Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0) unless noted.
+
+macbook-air-13-silver.png
+  Source: https://commons.wikimedia.org/wiki/File:Macbook_Air_M1_Silver_PNG.png
+  Author: see Commons file page
+  License: CC BY-SA 4.0
+
+macbook-air-13-starlight.jpg
+  Source: https://commons.wikimedia.org/wiki/File:M2_Macbook_Air_Starlight_model.jpg
+  License: CC BY-SA 4.0
+
+macbook-air-13-midnight.jpg
+  Source: https://commons.wikimedia.org/wiki/File:M2_Macbook_Air_Midnight_model_-_1.jpg
+  License: CC BY-SA 4.0
+
+macbook-air-15.jpg
+  Source: https://commons.wikimedia.org/wiki/File:Macbook_Air_15_inch_-_1.jpg
+  License: CC BY-SA 4.0
+
+macbook-pro-14-silver.jpg
+  Source: https://commons.wikimedia.org/wiki/File:A_2021_14-inch_Silver_MacBook_Pro.jpg
+  Author: Oops4321
+  License: CC BY-SA 4.0
+
+macbook-pro-16-space-gray.jpg
+  Source: https://commons.wikimedia.org/wiki/File:MacBook_Pro_16_(M1_Pro,_2021)_-_Wikipedia.jpg
+  Author: Premeditated
+  License: CC BY-SA 4.0
+
+Images were resized for web delivery; attribution still applies.

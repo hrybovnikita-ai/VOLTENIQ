@@ -1,0 +1,90 @@
+import axios from 'axios'
+
+const API_URL = import.meta.env.VITE_API_URL || '/api'
+
+export const http = axios.create({
+  baseURL: API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 15000,
+})
+
+http.interceptors.request.use((config) => {
+  const token = localStorage.getItem('volteniq_token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+http.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (!error.response) {
+      const networkError = new Error(
+        'Cannot reach the VOLTENIQ API. Start the backend on http://localhost:5000.'
+      )
+      networkError.status = 0
+      return Promise.reject(networkError)
+    }
+
+    const payload = error.response.data
+    const apiError = new Error(payload?.message || 'Request failed')
+    apiError.status = error.response.status
+    apiError.errors = payload?.errors
+    return Promise.reject(apiError)
+  }
+)
+
+/** Normalize axios response to the existing { success, data, message } shape. */
+async function request(method, path, { params, data } = {}) {
+  const response = await http.request({ method, url: path, params, data })
+  return response.data
+}
+
+function cleanParams(params = {}) {
+  return Object.fromEntries(
+    Object.entries(params).filter(([, v]) => v !== undefined && v !== '' && v !== null)
+  )
+}
+
+export const api = {
+  health: () => request('get', '/health'),
+  getProducts: (params = {}) => request('get', '/products', { params: cleanParams(params) }),
+  getFeatured: () => request('get', '/products/featured'),
+  getCategories: () => request('get', '/products/categories'),
+  suggestProducts: (q, limit = 8) =>
+    request('get', '/products/suggest', { params: { q: q || '', limit } }),
+  getProduct: (id) => request('get', `/products/${id}`),
+  compareProducts: (ids) =>
+    request('get', '/products/compare', { params: { ids: ids.join(',') } }),
+  firebaseSession: (body) => request('post', '/auth/firebase', { data: body }),
+  authProviders: () => request('get', '/auth/providers'),
+  me: () => request('get', '/auth/me'),
+  updateProfile: (body) => request('put', '/auth/me', { data: body }),
+  getOrders: () => request('get', '/orders'),
+  getOrder: (id) => request('get', `/orders/${id}`),
+  createOrder: (body) => request('post', '/orders', { data: body }),
+  getFavorites: () => request('get', '/favorites'),
+  toggleFavorite: (productId) =>
+    request('post', '/favorites/toggle', { data: { productId } }),
+  adminStats: () => request('get', '/admin/stats'),
+  adminProducts: (params = {}) =>
+    request('get', '/admin/products', { params: cleanParams(params) }),
+  adminCreateProduct: (body) => request('post', '/admin/products', { data: body }),
+  adminUpdateProduct: (id, body) =>
+    request('put', `/admin/products/${id}`, { data: body }),
+  adminDeleteProduct: (id) => request('delete', `/admin/products/${id}`),
+  adminOrders: () => request('get', '/admin/orders'),
+  adminUpdateOrderStatus: (id, status) =>
+    request('patch', `/admin/orders/${id}/status`, { data: { status } }),
+  adminUsers: () => request('get', '/admin/users'),
+  getPriceAlerts: () => request('get', '/alerts'),
+  getAlertNotifications: () => request('get', '/alerts/notifications'),
+  getPriceHistory: (productId) => request('get', `/alerts/history/${productId}`),
+  createPriceAlert: (body) => request('post', '/alerts', { data: body }),
+  deletePriceAlert: (id) => request('delete', `/alerts/${id}`),
+  demoPriceDrop: (productId, percent = 8) =>
+    request('post', `/alerts/demo-drop/${productId}`, { data: { percent } }),
+}
