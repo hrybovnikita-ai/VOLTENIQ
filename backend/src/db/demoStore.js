@@ -1,4 +1,3 @@
-import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { demoProducts } from '../data/products.js';
 
@@ -11,34 +10,6 @@ function createId() {
 }
 
 async function buildStore() {
-  const passwordHash = await bcrypt.hash('password123', 10);
-  const adminHash = await bcrypt.hash('admin123', 10);
-
-  const users = [
-    {
-      id: 'user-demo-001',
-      name: 'Demo User',
-      email: 'demo@volteniq.com',
-      password: passwordHash,
-      googleId: null,
-      firebaseUid: null,
-      role: 'USER',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-    {
-      id: 'admin-demo-001',
-      name: 'Volteniq Admin',
-      email: 'admin@volteniq.com',
-      password: adminHash,
-      googleId: null,
-      firebaseUid: null,
-      role: 'ADMIN',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-  ];
-
   const now = Date.now();
   const products = demoProducts.map((p, index) => ({
     id: `prod-${String(index + 1).padStart(3, '0')}`,
@@ -69,13 +40,14 @@ async function buildStore() {
   ]);
 
   return {
-    users,
     products,
     orders: [],
     favorites: [],
     priceAlerts: [],
     priceHistory,
     notifications: [],
+    chatConversations: [],
+    chatMessages: [],
   };
 }
 

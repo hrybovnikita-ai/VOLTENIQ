@@ -60,9 +60,9 @@ export default function CatalogPage() {
 
   return (
     <div className="container-shell page-section">
-      <div className="mb-6 sm:mb-8">
+      <div className="mb-6 sm:mb-8 min-w-0">
         <h1 className="page-title mb-2">Catalog</h1>
-        <p className="text-muted text-sm sm:text-base">
+        <p className="section-copy">
           Explore the full demo lineup. All prices are <span className="text-volt font-semibold">DEMO</span> USD
           prices — no real payments.
         </p>
@@ -74,14 +74,14 @@ export default function CatalogPage() {
           <input
             value={filters.search}
             onChange={(e) => updateFilter('search', e.target.value)}
-            placeholder="Search iPhone, MacBook, AirPods..."
-            className="w-full rounded-[14px] border border-silver/30 bg-white/50 dark:bg-graphite/50 pl-10 pr-4 py-2.5 text-sm outline-none focus:border-volt"
+            placeholder="Search iPhone, MacBook, Headphones..."
+            className="w-full min-h-11 rounded-[14px] border border-silver/30 bg-white/50 dark:bg-graphite/50 pl-10 pr-4 py-2.5 text-sm outline-none focus:border-volt"
           />
         </div>
         <select
           value={filters.sort}
           onChange={(e) => updateFilter('sort', e.target.value)}
-          className="w-full sm:w-auto rounded-[14px] border border-silver/30 bg-white/50 dark:bg-graphite/50 px-4 py-2.5 text-sm outline-none focus:border-volt"
+          className="w-full sm:w-auto sm:min-w-[12rem] min-h-11 rounded-[14px] border border-silver/30 bg-white/50 dark:bg-graphite/50 px-4 py-2.5 text-sm outline-none focus:border-volt"
         >
           {SORT_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>
@@ -97,11 +97,11 @@ export default function CatalogPage() {
         onChange={updatePriceRange}
       />
 
-      <div className="mb-6 sm:mb-8 flex flex-wrap gap-2">
+      <div className="mb-6 sm:mb-8 chip-row">
         <button
           type="button"
           onClick={() => updateFilter('category', 'all')}
-          className={`rounded-full px-3.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium border transition ${
+          className={`rounded-full px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-medium border transition min-h-10 ${
             filters.category === 'all'
               ? 'bg-volt text-ink border-volt'
               : 'border-silver/30 hover:border-volt'
@@ -114,7 +114,7 @@ export default function CatalogPage() {
             key={cat.id}
             type="button"
             onClick={() => updateFilter('category', cat.id)}
-            className={`rounded-full px-3.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium border transition ${
+            className={`rounded-full px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-medium border transition min-h-10 ${
               filters.category === cat.id
                 ? 'bg-volt text-ink border-volt'
                 : 'border-silver/30 hover:border-volt'

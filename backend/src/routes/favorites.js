@@ -19,7 +19,7 @@ router.get(
 
 router.post(
   '/toggle',
-  [body('productId').notEmpty().withMessage('productId required')],
+  [body('productId').isString().bail().trim().isLength({ min: 1, max: 100 }).withMessage('Invalid product ID')],
   validate,
   asyncHandler(async (req, res) => {
     const result = await toggleFavorite(req.user.id, req.body.productId);

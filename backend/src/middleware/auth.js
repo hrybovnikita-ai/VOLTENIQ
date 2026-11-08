@@ -25,7 +25,8 @@ export async function authenticate(req, res, next) {
       role: user.role,
     };
     next();
-  } catch {
+  } catch (error) {
+    if (!(error instanceof jwt.JsonWebTokenError)) return next(error);
     return res.status(401).json({ success: false, message: 'Invalid or expired token' });
   }
 }

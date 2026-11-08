@@ -1,8 +1,9 @@
+import { listUsers } from './userService.js';
 import { config } from '../config.js';
 import { prisma } from '../db/prisma.js';
 import { createId, getDemoStore } from '../db/demoStore.js';
 import { getProductById } from './productService.js';
-import { clampQuantity, getUnitPrice } from '../utils/pricing.js';
+import { getUnitPrice } from '../utils/pricing.js';
 
 export async function createOrder(userId, payload) {
   const { items, shipping } = payload;
@@ -24,8 +25,8 @@ export async function createOrder(userId, payload) {
       throw err;
     }
 
-    const quantity = clampQuantity(item.quantity, product.stock);
-    if (quantity < 1 || product.stock < quantity) {
+    const quantity = Number(item.quantity);
+    if (!Number.isInteger(quantity) || quantity < 1 || product.stock < quantity) {
       const err = new Error(`Insufficient stock for ${product.name}`);
       err.status = 400;
       throw err;
@@ -56,6 +57,12 @@ export async function createOrder(userId, payload) {
       configuration: selections,
       product,
     });
+  }
+
+  if (payload.expectedTotal != null && Math.round(total * 100) !== Math.round(payload.expectedTotal * 100)) {
+    const err = new Error('The product price changed. Review your selection before purchasing.');
+    err.status = 409;
+    throw err;
   }
 
   if (config.demoMode) {
@@ -96,40 +103,44 @@ export async function createOrder(userId, payload) {
     return order;
   }
 
-  const order = await prisma.order.create({
-    data: {
-      userId,
-      total: Math.round(total * 100) / 100,
-      shippingName: shipping.name,
-      shippingAddress: shipping.address,
-      shippingCity: shipping.city,
-      shippingZip: shipping.zip,
-      shippingCountry: shipping.country || 'Demo Country',
-      items: {
-        create: lineItems.map((li) => ({
-          productId: li.productId,
-          quantity: li.quantity,
-          price: li.price,
-          color: li.color,
-          storage: li.storage,
-          ram: li.ram,
-          size: li.size,
-        })),
+  return prisma.$transaction(async (tx) => {
+    for (const item of lineItems) {
+      const updated = await tx.product.updateMany({
+        where: { id: item.productId, stock: { gte: item.quantity } },
+        data: { stock: { decrement: item.quantity } },
+      });
+      if (!updated.count) {
+        const err = new Error(`Insufficient stock for ${item.product.name}`);
+        err.status = 409;
+        throw err;
+      }
+    }
+    return tx.order.create({
+      data: {
+        userId,
+        total: Math.round(total * 100) / 100,
+        shippingName: shipping.name,
+        shippingAddress: shipping.address,
+        shippingCity: shipping.city,
+        shippingZip: shipping.zip,
+        shippingCountry: shipping.country || 'Demo Country',
+        items: {
+          create: lineItems.map((li) => ({
+            productId: li.productId,
+            quantity: li.quantity,
+            price: li.price,
+            color: li.color,
+            storage: li.storage,
+            ram: li.ram,
+            size: li.size,
+          })),
+        },
       },
-    },
-    include: {
-      items: { include: { product: true } },
-    },
-  });
-
-  for (const li of lineItems) {
-    await prisma.product.update({
-      where: { id: li.productId },
-      data: { stock: { decrement: li.quantity } },
+      include: {
+        items: { include: { product: true } },
+      },
     });
-  }
-
-  return order;
+  });
 }
 
 export async function getOrdersByUser(userId) {
@@ -165,8 +176,9 @@ export async function getOrderById(id, userId, isAdmin = false) {
 export async function listAllOrders() {
   if (config.demoMode) {
     const store = await getDemoStore();
+    const users = new Map((await listUsers()).map(user => [user.id, user]));
     return store.orders.map((order) => {
-      const user = store.users.find((u) => u.id === order.userId);
+      const user = users.get(order.userId);
       return {
         ...order,
         user: user ? { id: user.id, name: user.name, email: user.email } : null,

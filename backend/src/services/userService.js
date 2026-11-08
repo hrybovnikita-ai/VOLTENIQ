@@ -1,8 +1,6 @@
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import { config } from '../config.js';
 import { prisma } from '../db/prisma.js';
-import { createId, getDemoStore } from '../db/demoStore.js';
 
 function sanitize(user) {
   if (!user) return null;
@@ -11,34 +9,18 @@ function sanitize(user) {
 }
 
 export async function findUserByEmail(email) {
-  if (config.demoMode) {
-    const store = await getDemoStore();
-    return store.users.find((u) => u.email.toLowerCase() === email.toLowerCase()) || null;
-  }
   return prisma.user.findUnique({ where: { email: email.toLowerCase() } });
 }
 
 export async function findUserByGoogleId(googleId) {
-  if (config.demoMode) {
-    const store = await getDemoStore();
-    return store.users.find((u) => u.googleId === googleId) || null;
-  }
   return prisma.user.findFirst({ where: { googleId } });
 }
 
 export async function findUserByFirebaseUid(firebaseUid) {
-  if (config.demoMode) {
-    const store = await getDemoStore();
-    return store.users.find((u) => u.firebaseUid === firebaseUid) || null;
-  }
   return prisma.user.findFirst({ where: { firebaseUid } });
 }
 
 export async function getUserById(id) {
-  if (config.demoMode) {
-    const store = await getDemoStore();
-    return sanitize(store.users.find((u) => u.id === id));
-  }
   const user = await prisma.user.findUnique({ where: { id } });
   return sanitize(user);
 }
@@ -47,7 +29,6 @@ export async function createUser({
   name,
   email,
   password,
-  role = 'USER',
   googleId = null,
   firebaseUid = null,
 }) {
@@ -55,42 +36,17 @@ export async function createUser({
     ? await bcrypt.hash(password, 10)
     : await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
 
-  if (config.demoMode) {
-    const store = await getDemoStore();
-    if (store.users.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
-      const err = new Error('Email already registered');
-      err.status = 409;
-      throw err;
-    }
-    const user = {
-      id: createId(),
-      name,
-      email: email.toLowerCase(),
-      password: hashed,
-      googleId,
-      firebaseUid,
-      role,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    store.users.push(user);
-    return sanitize(user);
-  }
 
   try {
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email: email.toLowerCase(),
-        password: hashed,
-        googleId,
-        firebaseUid,
-        role,
-      },
-    });
+    // Omit role entirely so PostgreSQL supplies USER. The API login cannot grant roles.
+    const [user] = await prisma.$queryRaw`
+      INSERT INTO public."User" (id, name, email, password, "googleId", "firebaseUid", "updatedAt")
+      VALUES (${crypto.randomUUID()}, ${name}, ${email.toLowerCase()}, ${hashed}, ${googleId}, ${firebaseUid}, CURRENT_TIMESTAMP)
+      RETURNING id, name, email, "googleId", "firebaseUid", role::text AS role, "createdAt", "updatedAt"
+    `;
     return sanitize(user);
   } catch (error) {
-    if (error.code === 'P2002') {
+    if (error.code === 'P2010' && error.meta?.code === '23505') {
       const err = new Error('Email already registered');
       err.status = 409;
       throw err;
@@ -117,21 +73,14 @@ export async function findOrCreateFirebaseUser({
     user = await findUserByGoogleId(firebaseUid);
   }
   if (!user) {
-    user = await findUserByEmail(email);
+    if (await findUserByEmail(email)) {
+      const err = new Error('This email already has an account. Use its original sign-in method.');
+      err.status = 409;
+      throw err;
+    }
   }
 
   if (user) {
-    if (config.demoMode) {
-      const store = await getDemoStore();
-      const existing = store.users.find((u) => u.id === user.id);
-      existing.firebaseUid = firebaseUid;
-      if (isGoogle) existing.googleId = firebaseUid;
-      if (name && (!existing.name || existing.name === existing.email.split('@')[0])) {
-        existing.name = name;
-      }
-      existing.updatedAt = new Date().toISOString();
-      return sanitize(existing);
-    }
 
     const updated = await prisma.user.update({
       where: { id: user.id },
@@ -160,15 +109,6 @@ export async function verifyPassword(user, password) {
 }
 
 export async function updateUser(id, data) {
-  if (config.demoMode) {
-    const store = await getDemoStore();
-    const user = store.users.find((u) => u.id === id);
-    if (!user) return null;
-    if (data.name) user.name = data.name;
-    if (data.password) user.password = await bcrypt.hash(data.password, 10);
-    user.updatedAt = new Date().toISOString();
-    return sanitize(user);
-  }
 
   const update = {};
   if (data.name) update.name = data.name;
@@ -179,10 +119,6 @@ export async function updateUser(id, data) {
 }
 
 export async function listUsers() {
-  if (config.demoMode) {
-    const store = await getDemoStore();
-    return store.users.map(sanitize);
-  }
   const users = await prisma.user.findMany({ orderBy: { createdAt: 'desc' } });
   return users.map(sanitize);
 }

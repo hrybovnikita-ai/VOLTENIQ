@@ -21,19 +21,44 @@ enum OrderStatus {
 }
 
 model User {
-  id            String         @id @default(cuid())
-  name          String
-  email         String         @unique
-  password      String
-  googleId      String?        @unique
-  firebaseUid   String?        @unique
-  role          Role           @default(USER)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  orders        Order[]
-  favorites     Favorite[]
-  priceAlerts   PriceAlert[]
-  notifications Notification[]
+  id               String             @id @default(cuid())
+  name             String
+  email            String             @unique
+  password         String
+  googleId         String?            @unique
+  firebaseUid      String?            @unique
+  role             Role               @default(USER)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  orders           Order[]
+  favorites        Favorite[]
+  priceAlerts      PriceAlert[]
+  notifications    Notification[]
+  chatConversations ChatConversation[]
+}
+
+model ChatConversation {
+  id        String        @id @default(cuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String        @default("New chat")
+  pinned    Boolean       @default(false)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  messages  ChatMessage[]
+
+  @@index([userId, pinned, updatedAt])
+}
+
+model ChatMessage {
+  id             String           @id @default(cuid())
+  conversationId String
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String
+  content        String
+  createdAt      DateTime         @default(now())
+
+  @@index([conversationId, createdAt])
 }
 
 model Product {
@@ -51,6 +76,17 @@ model Product {
   storage        String[]
   ram            String[] @default([])
   size           String[] @default([])
+  colorImages    Json?
+  variantImages  Json?
+  options        Json?
+  concept        Boolean @default(false)
+  chip           String[] @default([])
+  model          String[] @default([])
+  case           String[] @default([])
+  connectivity   String[] @default([])
+  material       String[] @default([])
+  band           String[] @default([])
+  compatible     String[] @default([])
   variantPricing Json?
   specs          Json
   stock          Int      @default(25)

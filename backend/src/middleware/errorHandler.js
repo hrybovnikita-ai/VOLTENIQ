@@ -6,13 +6,18 @@ export function notFound(req, res, next) {
 }
 
 export function errorHandler(err, req, res, next) {
-  console.error(err);
-  const status = err.status || err.statusCode || 500;
-  res.status(status).json({
-    success: false,
-    message: err.message || 'Internal server error',
-    errors: err.errors || undefined,
-  });
+  const requested = err.status || err.statusCode;
+  const status = Number.isInteger(requested) && requested >= 400 && requested <= 599 ? requested : 500;
+  let message = 'Internal server error';
+  if (status >= 500) {
+    console.error('Request failed', { status });
+    if (status === 503) message = 'Service temporarily unavailable';
+  } else if (err.type) {
+    message = err.type === 'entity.parse.failed' ? 'Invalid JSON body' : 'Invalid request body';
+  } else {
+    message = err.message;
+  }
+  res.status(status).json({ success: false, message });
 }
 
 export function asyncHandler(fn) {

@@ -1,5 +1,6 @@
+import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
-dotenv.config();
+dotenv.config({ path: fileURLToPath(new URL('../.env', import.meta.url)) });
 
 const defaultOrigins = [
   'http://localhost:5173',
@@ -13,9 +14,9 @@ const corsOrigin = process.env.CORS_ORIGIN
   : defaultOrigins;
 
 export const config = {
-  port: Number(process.env.PORT) || 5000,
+  port: Number(process.env.PORT) || 5004,
   nodeEnv: process.env.NODE_ENV || 'development',
-  demoMode: String(process.env.DEMO_MODE || 'true').toLowerCase() === 'true',
+  demoMode: String(process.env.DEMO_MODE || 'false').toLowerCase() === 'true',
   jwtSecret: process.env.JWT_SECRET || 'volteniq-demo-secret-change-me',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   corsOrigin,

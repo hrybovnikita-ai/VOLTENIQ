@@ -1,155 +1,93 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import {
-  createUserWithEmailAndPassword,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signInWithPopup,
-  signOut,
-  updateProfile,
-} from 'firebase/auth'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
-import { auth, googleProvider, mapFirebaseAuthError } from '../lib/firebase'
 
 const AuthContext = createContext(null)
 const TOKEN_KEY = 'volteniq_token'
 
-function nameFromEmail(email) {
-  const local = String(email || '').split('@')[0] || 'Member'
-  return local
-    .replace(/[._-]+/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase())
-    .trim()
-    .slice(0, 60)
+async function firebaseSession(method, credentials) {
+  const { auth, googleProvider, mapFirebaseAuthError } = await import('../lib/firebase')
+  const { signInWithPopup, signInWithEmailAndPassword } = await import('firebase/auth')
+  let timer
+  try {
+    const exchange = async () => {
+      const credential = method === 'google'
+        ? await signInWithPopup(auth, googleProvider)
+        : await signInWithEmailAndPassword(auth, credentials.email, credentials.password)
+      return api.firebaseSession({ idToken: await credential.user.getIdToken() })
+    }
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('Sign-in timed out. Please try again.')),
+        method === 'google' ? 120000 : 20000)
+    })
+    return await Promise.race([exchange(), timeout])
+  } catch (error) {
+    throw new Error(mapFirebaseAuthError(error), { cause: error })
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
-  const [firebaseUser, setFirebaseUser] = useState(null)
   const [loading, setLoading] = useState(true)
-  const syncingRef = useRef(false)
-
-  const clearSession = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY)
-    setUser(null)
-  }, [])
-
-  const syncBackendSession = useCallback(
-    async (fbUser) => {
-      if (!fbUser) {
-        clearSession()
-        return null
-      }
-
-      const idToken = await fbUser.getIdToken()
-      const res = await api.firebaseSession({ idToken })
-      localStorage.setItem(TOKEN_KEY, res.data.token)
-      setUser(res.data.user)
-      return res.data.user
-    },
-    [clearSession]
-  )
+  const revision = useRef(0)
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-      setFirebaseUser(fbUser)
-      if (syncingRef.current) {
-        setLoading(false)
-        return
-      }
-
-      try {
-        if (!fbUser) {
-          clearSession()
-          return
-        }
-        await syncBackendSession(fbUser)
-      } catch {
-        clearSession()
-      } finally {
-        setLoading(false)
-      }
-    })
-
-    return unsubscribe
-  }, [clearSession, syncBackendSession])
-
-  const withAuthFlow = async (action) => {
-    syncingRef.current = true
-    try {
-      const credential = await action()
-      try {
-        const appUser = await syncBackendSession(credential.user)
-        setFirebaseUser(credential.user)
-        return appUser
-      } catch (syncError) {
-        await signOut(auth).catch(() => {})
-        clearSession()
-        const mapped = new Error(
-          syncError?.message || 'Signed in with Firebase, but the server session could not be created.'
-        )
-        mapped.code = syncError?.status || 'backend-sync'
-        throw mapped
-      }
-    } catch (error) {
-      if (error?.code === 'backend-sync' || error?.code === 401 || typeof error?.status === 'number') {
-        throw error
-      }
-      const mapped = new Error(mapFirebaseAuthError(error))
-      mapped.code = error?.code
-      throw mapped
-    } finally {
-      syncingRef.current = false
+    const version = revision.current
+    let active = true
+    const token = localStorage.getItem(TOKEN_KEY)
+    if (!token) {
       setLoading(false)
+      return
     }
-  }
-
-  const login = async (email, password) =>
-    withAuthFlow(() => signInWithEmailAndPassword(auth, email, password))
-
-  const register = async ({ email, password, name }) =>
-    withAuthFlow(async () => {
-      const credential = await createUserWithEmailAndPassword(auth, email, password)
-      const displayName = (name || '').trim() || nameFromEmail(email)
-      try {
-        await updateProfile(credential.user, { displayName })
-      } catch {
-        // Profile display name is optional; continue if it fails.
+    api.me().then(({ data }) => {
+      if (active && version === revision.current) setUser(data.user)
+    }).catch((error) => {
+      if (active && version === revision.current && error.status === 401) {
+        localStorage.removeItem(TOKEN_KEY)
       }
-      return credential
+    }).finally(() => {
+      if (active) setLoading(false)
     })
+    return () => { active = false }
+  }, [])
 
-  const loginWithGoogle = async () =>
-    withAuthFlow(() => signInWithPopup(auth, googleProvider))
+  function saveSession({ data }) {
+    revision.current++
+    localStorage.setItem(TOKEN_KEY, data.token)
+    setUser(data.user)
+    return data.user
+  }
 
-  const logout = async () => {
-    syncingRef.current = true
+  async function login(email, password) {
+    const credentials = { email, password }
     try {
-      await signOut(auth)
-      clearSession()
-      setFirebaseUser(null)
-    } finally {
-      syncingRef.current = false
+      return saveSession(await api.login(credentials))
+    } catch (error) {
+      if (error.provider !== 'firebase') throw error
+      return saveSession(await firebaseSession('password', credentials))
     }
   }
 
-  const updateProfileInfo = async (payload) => {
-    const res = await api.updateProfile(payload)
-    setUser(res.data.user)
-    if (auth.currentUser && payload.name) {
-      try {
-        await updateProfile(auth.currentUser, { displayName: payload.name })
-      } catch {
-        // Keep backend profile as source of truth for the app shell.
-      }
-    }
-    return res.data.user
+  const register = async ({ email, password }) => saveSession(await api.register({ email, password }))
+  const loginWithGoogle = async () => saveSession(await firebaseSession('google'))
+
+  async function logout() {
+    revision.current++
+    localStorage.removeItem(TOKEN_KEY)
+    setUser(null)
+  }
+
+  async function updateProfileInfo(payload) {
+    const { data } = await api.updateProfile(payload)
+    setUser(data.user)
+    return data.user
   }
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        firebaseUser,
         loading,
         isAuthenticated: Boolean(user),
         isAdmin: user?.role === 'ADMIN',

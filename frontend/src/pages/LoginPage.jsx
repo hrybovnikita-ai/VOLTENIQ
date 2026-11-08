@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { consumeAuthRedirect, saveAuthRedirect } from '../utils/purchaseIntent'
 import AuthLayout from '../components/auth/AuthLayout'
 import AuthPasswordField from '../components/auth/AuthPasswordField'
 import GoogleSignInButton from '../components/auth/GoogleSignInButton'
@@ -19,8 +18,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
 
   const redirectAfterAuth = () => {
-    if (location.state?.from) saveAuthRedirect(location.state.from)
-    navigate(consumeAuthRedirect(location.state?.from || '/'), { replace: true })
+    navigate('/', { replace: true })
   }
 
   const onSubmit = async (e) => {
@@ -80,7 +78,7 @@ export default function LoginPage() {
           placeholder="Your password"
         />
 
-        {error ? <p className="text-sm text-red-400">{error}</p> : null}
+        {error ? <p role="alert" className="text-sm text-red-400">{error}</p> : null}
 
         <Button type="submit" className="w-full rounded-[16px]" size="lg" disabled={loading}>
           {loading ? 'Signing in...' : 'Sign In'}

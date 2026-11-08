@@ -77,16 +77,18 @@ export default function CartPage() {
                     <div className="inline-flex items-center rounded-[12px] border border-silver/30">
                       <button
                         type="button"
-                        className="px-3 py-1 disabled:opacity-40"
+                        aria-label="Decrease quantity"
+                        className="px-3.5 py-2 min-h-11 min-w-11 disabled:opacity-40 touch-manipulation"
                         disabled={item.quantity <= 1}
                         onClick={() => updateQuantity(item.key, item.quantity - 1)}
                       >
                         −
                       </button>
-                      <span className="px-3 py-1 text-sm font-semibold">{item.quantity}</span>
+                      <span className="px-3 py-2 text-sm font-semibold tabular-nums">{item.quantity}</span>
                       <button
                         type="button"
-                        className="px-3 py-1 disabled:opacity-40"
+                        aria-label="Increase quantity"
+                        className="px-3.5 py-2 min-h-11 min-w-11 disabled:opacity-40 touch-manipulation"
                         disabled={item.quantity >= maxStock}
                         onClick={() => updateQuantity(item.key, item.quantity + 1)}
                       >
@@ -96,7 +98,7 @@ export default function CartPage() {
                     <button
                       type="button"
                       onClick={() => removeItem(item.key)}
-                      className="text-muted hover:text-red-500"
+                      className="inline-flex items-center justify-center min-h-10 min-w-10 text-muted hover:text-red-500 touch-manipulation"
                       aria-label="Remove"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -143,7 +145,7 @@ export default function CartPage() {
           <p className="text-[11px] text-muted text-center mt-3">
             {isAuthenticated
               ? 'Continues to protected demo checkout'
-              : 'Sign up required — your bag will be waiting'}
+              : 'Sign in required — your bag will be waiting'}
           </p>
         </aside>
       </div>

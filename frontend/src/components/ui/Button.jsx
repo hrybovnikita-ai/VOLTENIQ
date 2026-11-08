@@ -20,15 +20,15 @@ export default function Button({
   ...props
 }) {
   const sizes = {
-    sm: 'px-3.5 py-2 text-sm',
-    md: 'px-5 py-2.5 text-sm',
-    lg: 'px-6 py-3.5 text-base',
+    sm: 'min-h-10 px-3.5 py-2 text-sm rounded-[12px]',
+    md: 'min-h-11 px-5 py-2.5 text-sm rounded-[14px]',
+    lg: 'min-h-12 px-5 sm:px-6 py-3 text-[0.95rem] sm:text-base rounded-[16px]',
   }
 
   return (
     <Comp
       className={cn(
-        'inline-flex items-center justify-center gap-2 rounded-[14px] font-semibold transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none',
+        'inline-flex items-center justify-center gap-2 font-semibold transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none touch-manipulation',
         variants[variant],
         sizes[size],
         className

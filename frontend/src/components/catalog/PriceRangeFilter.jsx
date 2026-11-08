@@ -143,13 +143,13 @@ export default function PriceRangeFilter({ minPrice, maxPrice, onChange }) {
         />
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="chip-row">
         {PRICE_PRESETS.map((preset) => (
           <button
             key={preset.id}
             type="button"
             onClick={() => commit(preset.min, preset.max)}
-            className={`rounded-full px-3.5 py-1.5 text-xs sm:text-sm font-medium border transition ${
+            className={`rounded-full px-3.5 py-2 text-xs sm:text-sm font-medium border transition min-h-10 ${
               activePreset === preset.id
                 ? 'bg-volt text-ink border-volt'
                 : 'border-silver/30 hover:border-volt'
@@ -162,7 +162,7 @@ export default function PriceRangeFilter({ minPrice, maxPrice, onChange }) {
           <button
             type="button"
             onClick={() => commit('', '')}
-            className="rounded-full px-3.5 py-1.5 text-xs sm:text-sm font-medium border border-silver/30 text-muted hover:border-volt hover:text-volt"
+            className="rounded-full px-3.5 py-2 text-xs sm:text-sm font-medium border border-silver/30 text-muted hover:border-volt hover:text-volt min-h-10"
           >
             Clear
           </button>

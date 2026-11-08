@@ -54,7 +54,7 @@ router.get(
 router.get(
   '/categories',
   asyncHandler(async (req, res) => {
-    res.json({ success: true, data: { categories: getCategories() } });
+    res.json({ success: true, data: { categories: await getCategories() } });
   })
 );
 

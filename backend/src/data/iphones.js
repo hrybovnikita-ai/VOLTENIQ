@@ -11,8 +11,16 @@ const img = {
   iphone13Blue: '/products/iphone-13-blue.png',
   iphone13Pink: '/products/iphone-13-pink.png',
   iphone13Pro: '/products/iphone-13-pro.png',
+  iphone13ProGraphite: '/products/iphone-13-pro-graphite.png',
+  iphone13ProGold: '/products/iphone-13-pro-gold.png',
+  iphone13ProSierraBlue: '/products/iphone-13-pro-sierra-blue.png',
+  iphone13ProSilver: '/products/iphone-13-pro-silver.png',
   iphone14: '/products/iphone-14.png',
   iphone14Pro: '/products/iphone-14-pro.png',
+  iphone14ProMaxGold: '/products/iphone-14-pro-max-gold.png',
+  iphone14ProMaxSpaceBlack: '/products/iphone-14-pro-max-space-black.png',
+  iphone14ProMaxSilver: '/products/iphone-14-pro-max-silver.png',
+  iphone14ProMaxBlue: '/products/iphone-14-pro-max-blue.png',
   iphone15Black: '/products/iphone-15-black.png',
   iphone15Green: '/products/iphone-15-green.png',
   iphone15ProBlue: '/products/iphone-15-pro-blue.png',
@@ -24,6 +32,12 @@ const img = {
   iphone17ProCosmicOrange: '/products/iphone-17-pro-cosmic-orange.jpg',
   iphone17ProDeepBlue: '/products/iphone-17-pro-deep-blue.png',
   iphone17ProSilver: '/products/iphone-17-pro-silver.png',
+  iphone18ProMax: '/products/iphone-18-pro-max.png',
+  iphone18ProMaxColors: '/products/iphone-18-pro-max-colors.png',
+  iphone18ProMaxDeepPurple: '/products/iphone-18-pro-max-deep-purple.png',
+  iphone18ProMaxBlack: '/products/iphone-18-pro-max-black.png',
+  iphone18ProMaxSilver: '/products/iphone-18-pro-max-silver.png',
+  iphone18ProMaxSkyBlue: '/products/iphone-18-pro-max-sky-blue.png',
   placeholder: '/products/placeholder-phone.svg',
 };
 
@@ -51,11 +65,35 @@ const IPHONE_13_COLOR_IMAGES = {
   Blue: img.iphone13Blue,
 };
 
+const IPHONE_13_PRO_COLOR_IMAGES = {
+  Graphite: img.iphone13ProGraphite,
+  Gold: img.iphone13ProGold,
+  'Sierra Blue': img.iphone13ProSierraBlue,
+  Silver: img.iphone13ProSilver,
+  'Alpine Green': img.iphone13Pro,
+};
+
+const IPHONE_14_PRO_MAX_COLOR_IMAGES = {
+  'Deep Purple': img.iphone14Pro,
+  'Space Black': img.iphone14ProMaxSpaceBlack,
+  Gold: img.iphone14ProMaxGold,
+  Silver: img.iphone14ProMaxSilver,
+  Blue: img.iphone14ProMaxBlue,
+};
+
 const IPHONE_17_PRO_COLORS = ['Cosmic Orange', 'Deep Blue', 'Silver'];
 const IPHONE_17_PRO_COLOR_IMAGES = {
   'Cosmic Orange': img.iphone17ProCosmicOrange,
   'Deep Blue': img.iphone17ProDeepBlue,
   Silver: img.iphone17ProSilver,
+};
+
+const IPHONE_18_PRO_MAX_COLORS = ['Deep Purple', 'Black', 'Silver', 'Sky Blue'];
+const IPHONE_18_PRO_MAX_COLOR_IMAGES = {
+  'Deep Purple': img.iphone18ProMaxDeepPurple,
+  Black: img.iphone18ProMaxBlack,
+  Silver: img.iphone18ProMaxSilver,
+  'Sky Blue': img.iphone18ProMaxSkyBlue,
 };
 
 function roundRating(value) {
@@ -212,10 +250,10 @@ export const iphoneProducts = [
     slug: 'iphone-13-pro',
     price: 749,
     storageStep: 50,
-    image: img.iphone13Pro,
+    image: img.iphone13ProGraphite,
     storage: ['128GB', '256GB', '512GB', '1TB'],
-    colors: ['Alpine Green', 'Graphite', 'Gold', 'Silver', 'Sierra Blue'],
-    colorImages: { 'Alpine Green': img.iphone13Pro },
+    colors: ['Graphite', 'Gold', 'Sierra Blue', 'Silver', 'Alpine Green'],
+    colorImages: { ...IPHONE_13_PRO_COLOR_IMAGES },
   }),
   phone({
     name: 'iPhone 13 Pro Max',
@@ -265,8 +303,8 @@ export const iphoneProducts = [
     storageStep: 16,
     image: img.iphone14Pro,
     storage: ['128GB', '256GB', '512GB', '1TB'],
-    colors: ['Deep Purple', 'Space Black', 'Silver', 'Gold'],
-    colorImages: { 'Deep Purple': img.iphone14Pro },
+    colors: ['Deep Purple', 'Space Black', 'Gold', 'Silver', 'Blue'],
+    colorImages: { ...IPHONE_14_PRO_MAX_COLOR_IMAGES },
   }),
 
   phone({
@@ -396,5 +434,22 @@ export const iphoneProducts = [
     colorImages: { ...IPHONE_17_PRO_COLOR_IMAGES },
     featured: true,
     rating: 4.9,
+  }),
+
+  phone({
+    name: 'iPhone 18 Pro Max',
+    slug: 'iphone-18-pro-max',
+    price: 1599,
+    compareAt: 1799,
+    storageStep: 100,
+    image: img.iphone18ProMaxDeepPurple,
+    storage: ['64GB', '128GB', '256GB', '512GB', '1TB', '2TB'],
+    colors: [...IPHONE_18_PRO_MAX_COLORS],
+    colorImages: { ...IPHONE_18_PRO_MAX_COLOR_IMAGES },
+    concept: true,
+    featured: true,
+    rating: 4.9,
+    description:
+      'iPhone 18 Pro Max concept demo for VOLTENIQ. Choose Deep Purple, Black, Silver, or Sky Blue with storage from 64GB to 2TB — DEMO prices only, not an official Apple product.',
   }),
 ];

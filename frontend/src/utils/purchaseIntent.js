@@ -55,5 +55,5 @@ export function beginCheckout({ isAuthenticated, navigate, intent }) {
     navigate('/checkout')
     return
   }
-  navigate('/signup', { state: { from: '/checkout' } })
+  navigate('/login', { state: { from: '/checkout' } })
 }

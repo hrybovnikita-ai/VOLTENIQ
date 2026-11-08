@@ -23,28 +23,57 @@ import Spinner from '../components/ui/Spinner'
 import ErrorState from '../components/ui/ErrorState'
 import ProductViewer from '../components/products/ProductViewer'
 import PriceAlertButton from '../components/products/PriceAlertButton'
+import { isLightSwatch, swatchColor } from '../utils/colorSwatches'
 
-function OptionGroup({ label, options, value, onChange, priceHints }) {
+function OptionGroup({ label, options, value, onChange, priceHints, optionKey }) {
   if (!options?.length) return null
+  const colorMode = optionKey === 'color' || label === 'Color'
+
   return (
     <div className="mb-6">
-      <p className="text-sm font-semibold mb-2">{label}</p>
-      <div className="flex flex-wrap gap-2">
-        {options.map((option) => (
-          <button
-            key={option}
-            type="button"
-            onClick={() => onChange(option)}
-            className={`rounded-full px-4 py-2 text-sm border transition ${
-              value === option ? 'border-volt bg-volt/15' : 'border-silver/30'
-            }`}
-          >
-            {option}
-            {priceHints?.[option] != null && priceHints[option] !== '' ? (
-              <span className="ml-1 text-xs text-muted">{priceHints[option]}</span>
-            ) : null}
-          </button>
-        ))}
+      <p className="text-sm font-semibold mb-2">
+        {label}
+        {colorMode && value ? <span className="ml-2 font-normal text-muted">· {value}</span> : null}
+      </p>
+      <div className={`flex flex-wrap ${colorMode ? 'gap-3' : 'gap-2'}`}>
+        {options.map((option) =>
+          colorMode ? (
+            <button
+              key={option}
+              type="button"
+              title={option}
+              aria-label={option}
+              aria-pressed={value === option}
+              onClick={() => onChange(option)}
+              className={`relative h-11 w-11 rounded-full border-2 transition touch-manipulation ${
+                value === option ? 'border-volt scale-110' : 'border-silver/40 hover:border-volt/60'
+              }`}
+              style={{ backgroundColor: swatchColor(option) }}
+            >
+              {value === option ? (
+                <span
+                  className={`absolute inset-0 m-auto h-2 w-2 rounded-full ${
+                    isLightSwatch(option) ? 'bg-ink' : 'bg-snow'
+                  }`}
+                />
+              ) : null}
+            </button>
+          ) : (
+            <button
+              key={option}
+              type="button"
+              onClick={() => onChange(option)}
+              className={`rounded-full px-3.5 sm:px-4 py-2 text-sm border transition min-h-10 touch-manipulation ${
+                value === option ? 'border-volt bg-volt/15' : 'border-silver/30'
+              }`}
+            >
+              {option}
+              {priceHints?.[option] != null && priceHints[option] !== '' ? (
+                <span className="ml-1 text-xs text-muted">{priceHints[option]}</span>
+              ) : null}
+            </button>
+          )
+        )}
       </div>
     </div>
   )
@@ -157,7 +186,9 @@ export default function ProductDetailPage() {
           <div className="glass rounded-[16px] p-4 mb-6 space-y-2">
             <div className="flex items-end justify-between gap-3">
               <span className="text-sm text-muted">Unit price</span>
-              <span className="text-3xl font-bold">{formatPrice(unitPrice)}</span>
+              <span className="text-[clamp(1.5rem,1.2rem+1.5vw,1.875rem)] font-bold tabular-nums">
+                {formatPrice(unitPrice)}
+              </span>
             </div>
             <div className="flex items-end justify-between gap-3">
               <span className="text-sm text-muted">
@@ -194,6 +225,7 @@ export default function ProductDetailPage() {
           {optionGroups.map((group) => (
             <OptionGroup
               key={group.key}
+              optionKey={group.key}
               label={group.label}
               options={group.values}
               value={selections[group.key] || ''}
@@ -207,7 +239,8 @@ export default function ProductDetailPage() {
             <div className="inline-flex items-center rounded-[14px] border border-silver/30">
               <button
                 type="button"
-                className="px-4 py-2 disabled:opacity-40"
+                aria-label="Decrease quantity"
+                        className="min-h-11 min-w-11 px-4 py-2 disabled:opacity-40"
                 disabled={safeQty <= 1}
                 onClick={() => setQty((q) => clampQuantity(q - 1, maxStock))}
               >
@@ -216,7 +249,8 @@ export default function ProductDetailPage() {
               <span className="px-4 py-2 min-w-12 text-center font-semibold">{safeQty}</span>
               <button
                 type="button"
-                className="px-4 py-2 disabled:opacity-40"
+                aria-label="Increase quantity"
+                        className="min-h-11 min-w-11 px-4 py-2 disabled:opacity-40"
                 disabled={safeQty >= maxStock}
                 onClick={() => setQty((q) => clampQuantity(q + 1, maxStock))}
               >

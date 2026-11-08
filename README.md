@@ -8,7 +8,7 @@ All prices are clearly labeled as **demo prices**. Checkout never collects card 
 
 - **Frontend:** React 19, Vite, JavaScript, Tailwind CSS v4, React Router
 - **Backend:** Node.js, Express, JWT auth, bcrypt password hashing, express-validator
-- **Database:** PostgreSQL + Prisma (optional in-memory `DEMO_MODE` for local runs without Postgres)
+- **Database:** PostgreSQL + Prisma (accounts always use PostgreSQL; `DEMO_MODE` switches store data only)
 
 ## Features
 
@@ -19,43 +19,42 @@ All prices are clearly labeled as **demo prices**. Checkout never collects card 
 - Admin dashboard (products + demo orders)
 - AI shopping assistant UI (local demo replies; ready for future backend AI)
 
-## Quick start (demo mode — no Postgres required)
+## Quick start (PostgreSQL)
 
 ### 1. Backend
 
+For a fresh installation, configure PostgreSQL as described below. Keep the existing .env file when restarting a configured project.
+
 ```bash
 cd backend
-cp .env.example .env
+cp -n .env.example .env
 npm install
 npm run dev
 ```
 
-API: [http://localhost:5000](http://localhost:5000)
+API: [http://localhost:5004](http://localhost:5004)
 
-`DEMO_MODE=true` uses in-memory seed data (default).
+The default, `DEMO_MODE=false`, stores accounts in PostgreSQL.
 
 ### 2. Frontend
 
 ```bash
 cd frontend
-cp .env.example .env
+cp -n .env.example .env
 npm install
 npm run dev
 ```
 
 App: [http://localhost:5173](http://localhost:5173)
 
-### Demo accounts
+### First sign-in
 
-| Role  | Email                 | Password     |
-|-------|-----------------------|--------------|
-| User  | demo@volteniq.com     | password123  |
-| Admin | admin@volteniq.com    | admin123     |
+Open [Create Account](http://localhost:5173/signup) to register an email and password. The PostgreSQL seed adds catalog products only. Accounts from an earlier in-memory run exist only in that process.
 
 ### Auth-protected Buy Now
 
 - **Buy Now** on product pages and cart requires authentication.
-- Guests are sent to **Sign Up** (or Sign In); after success they return to **demo checkout**.
+- Guests are sent to **Sign In** and redirected to the main store after authentication.
 - Checkout route is protected; orders API requires a JWT.
 - Checkout never collects card details.
 
@@ -105,7 +104,7 @@ npm run dev
 
 | Variable        | Description                                      |
 |-----------------|--------------------------------------------------|
-| `PORT`          | API port (default `5000`)                        |
+| `PORT`          | API port (default `5004`)                        |
 | `DEMO_MODE`     | `true` = in-memory store; `false` = Prisma/PG    |
 | `DATABASE_URL`  | PostgreSQL connection string                     |
 | `JWT_SECRET`    | Secret for signing JWTs                          |
@@ -147,3 +146,15 @@ Volteniq/
 - This is a **portfolio / learning demo**, not a production storefront.
 - Do not enter real payment information anywhere in the app.
 - Orange accent `#FF7900`, graphite/black/silver palette, glassmorphism UI with light/dark themes.
+
+## MongoDB Atlas store storage
+
+Set `MONGODB_URI` in the ignored `backend/.env` using the Atlas database user password, URL-encoded if needed. Grant the application access to the dedicated `volteniq_store` database and allow the backend host in Atlas Network Access. Restart the API after changing its environment.
+
+From `backend`, run `npm run mongo:check` to verify authentication and ping without writing data. Supply a separate `MONGODB_SYNC_URI` to the operator job and run `npm run mongo:sync` to publish a consistent PostgreSQL snapshot of products, categories, favorites, and demo order summaries. Refresh the snapshot explicitly after changes. Use this database exclusively for VOLTENIQ. The sync replaces managed snapshots transactionally and preserves saved carts. Account rows, password hashes, shipping addresses, and payment details are excluded.
+
+PostgreSQL remains authoritative for authentication, favorites, catalog prices, stock, and order history. The category endpoint reads published MongoDB categories and falls back to the built-in taxonomy when unavailable. Guest and existing browser carts retain their local storage behavior.
+
+The authenticated saved-cart API uses the PostgreSQL JWT. GET `/api/cart` returns `items` and `version`. PUT `/api/cart` takes the last-read version and up to 100 lines with `productId`, positive integer `quantity`, and a `selection` object containing variant strings. An absent cart starts at version zero. A stale version returns 409; unavailable storage returns 503. Checkout calculates prices from the live catalog.
+
+Database runtime roles, maintenance identities and rollout instructions are in [the database security runbook](backend/security/DEPLOY.md).

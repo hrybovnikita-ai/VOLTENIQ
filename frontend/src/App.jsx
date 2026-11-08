@@ -10,6 +10,7 @@ import HomePage from './pages/HomePage'
 import CatalogPage from './pages/CatalogPage'
 import ProductDetailPage from './pages/ProductDetailPage'
 import CartPage from './pages/CartPage'
+import OrderSuccessPage from './pages/OrderSuccessPage'
 import CheckoutPage from './pages/CheckoutPage'
 import FavoritesPage from './pages/FavoritesPage'
 import ComparePage from './pages/ComparePage'
@@ -35,6 +36,7 @@ export default function App() {
                     <Route index element={<HomePage />} />
                     <Route path="catalog" element={<CatalogPage />} />
                     <Route path="products/:id" element={<ProductDetailPage />} />
+                    <Route path="order/success" element={<RequireAuth><OrderSuccessPage /></RequireAuth>} />
                     <Route path="cart" element={<CartPage />} />
                     <Route
                       path="checkout"
@@ -46,8 +48,8 @@ export default function App() {
                     />
                     <Route path="favorites" element={<FavoritesPage />} />
                     <Route path="compare" element={<ComparePage />} />
-                    <Route path="profile" element={<ProfilePage />} />
-                    <Route path="admin" element={<AdminPage />} />
+                    <Route path="profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
+                    <Route path="admin" element={<RequireAuth><AdminPage /></RequireAuth>} />
                     <Route path="assistant" element={<AssistantPage />} />
                     <Route path="*" element={<NotFoundPage />} />
                   </Route>

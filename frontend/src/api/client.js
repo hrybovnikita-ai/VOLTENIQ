@@ -23,15 +23,16 @@ http.interceptors.response.use(
   (error) => {
     if (!error.response) {
       const networkError = new Error(
-        'Cannot reach the VOLTENIQ API. Start the backend on http://localhost:5000.'
+        'Cannot reach the VOLTENIQ API. Please check your connection and try again.'
       )
       networkError.status = 0
       return Promise.reject(networkError)
     }
 
     const payload = error.response.data
-    const apiError = new Error(payload?.message || 'Request failed')
+    const apiError = new Error(payload?.errors?.[0]?.message || payload?.message || 'The server could not complete the request. Please try again.')
     apiError.status = error.response.status
+    apiError.provider = payload?.provider
     apiError.errors = payload?.errors
     return Promise.reject(apiError)
   }
@@ -59,6 +60,8 @@ export const api = {
   getProduct: (id) => request('get', `/products/${id}`),
   compareProducts: (ids) =>
     request('get', '/products/compare', { params: { ids: ids.join(',') } }),
+  login: (body) => request('post', '/auth/login', { data: body }),
+  register: (body) => request('post', '/auth/register', { data: body }),
   firebaseSession: (body) => request('post', '/auth/firebase', { data: body }),
   authProviders: () => request('get', '/auth/providers'),
   me: () => request('get', '/auth/me'),
@@ -87,4 +90,11 @@ export const api = {
   deletePriceAlert: (id) => request('delete', `/alerts/${id}`),
   demoPriceDrop: (productId, percent = 8) =>
     request('post', `/alerts/demo-drop/${productId}`, { data: { percent } }),
+  listChats: () => request('get', '/chats'),
+  createChat: (body = {}) => request('post', '/chats', { data: body }),
+  getChat: (id) => request('get', `/chats/${id}`),
+  updateChat: (id, body) => request('patch', `/chats/${id}`, { data: body }),
+  deleteChat: (id) => request('delete', `/chats/${id}`),
+  appendChatMessages: (id, messages) =>
+    request('post', `/chats/${id}/messages`, { data: { messages } }),
 }

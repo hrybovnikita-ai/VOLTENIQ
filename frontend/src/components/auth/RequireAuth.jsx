@@ -18,7 +18,7 @@ export default function RequireAuth({ children }) {
   if (!isAuthenticated) {
     const redirectTo = `${location.pathname}${location.search || ''}`
     saveAuthRedirect(redirectTo)
-    return <Navigate to="/signup" replace state={{ from: redirectTo }} />
+    return <Navigate to="/login" replace state={{ from: redirectTo }} />
   }
 
   return children

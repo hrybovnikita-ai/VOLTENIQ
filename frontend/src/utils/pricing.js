@@ -130,18 +130,22 @@ export function getVariantImage(product, colorOrSelections) {
   const variantImages = product.variantImages || {}
   const colorMap = product.colorImages || variantImages.color || null
 
-  // Prefer an exact color match when available; never reuse another finish
-  if (colorMap && typeof colorMap === 'object' && selections.color) {
-    return colorMap[selections.color] || PLACEHOLDER_IMAGE
-  }
-
-  // Then size / model / case maps (e.g. MacBook 13" vs 15")
-  for (const key of ['size', 'model', 'case', 'band', 'chip']) {
+  // Size / model first so MacBook 13/14/15/16 photos swap with the Display option
+  for (const key of ['size', 'model', 'case', 'band']) {
     const map = variantImages[key]
     const value = selections[key]
     if (map && value && map[value]) {
       return map[value]
     }
+  }
+
+  // Exact color match when available; never reuse another finish
+  if (colorMap && typeof colorMap === 'object' && selections.color) {
+    return colorMap[selections.color] || PLACEHOLDER_IMAGE
+  }
+
+  if (variantImages.chip && selections.chip && variantImages.chip[selections.chip]) {
+    return variantImages.chip[selections.chip]
   }
 
   return product.image || PLACEHOLDER_IMAGE

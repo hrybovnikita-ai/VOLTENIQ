@@ -4,6 +4,7 @@ import { authenticate } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { createOrder, getOrderById, getOrdersByUser } from '../services/orderService.js';
+import { stripPaymentSecrets } from '../utils/paymentSafety.js';
 
 const router = Router();
 
@@ -30,6 +31,7 @@ router.get(
 
 router.post(
   '/',
+  stripPaymentSecrets,
   [
     body('items').isArray({ min: 1 }).withMessage('At least one item required'),
     body('items.*.productId').notEmpty().withMessage('Product id required'),

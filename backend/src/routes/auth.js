@@ -7,6 +7,9 @@ import { authenticate } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { verifyFirebaseIdToken } from '../utils/firebaseAuth.js';
 import {
+  createUser,
+  findUserByEmail,
+  verifyPassword,
   findOrCreateFirebaseUser,
   getUserById,
   updateUser,
@@ -30,6 +33,34 @@ function nameFromEmail(email) {
     .trim()
     .slice(0, 60);
 }
+
+const emailField = () => body('email').isString().trim().isEmail().withMessage('Enter a valid email address');
+
+router.post('/register', [
+  emailField(),
+  body('password').isString().isLength({ min: 6 }).isByteLength({ max: 72 })
+    .withMessage('Use at least 6 characters and at most 72 bytes for your password'),
+], validate, asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
+  const user = await createUser({ email, password, name: nameFromEmail(email) });
+  res.status(201).json({ success: true, data: { user, token: signToken(user) } });
+}));
+
+router.post('/login', [
+  emailField(),
+  body('password').isString().notEmpty().withMessage('Enter your password'),
+], validate, asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
+  const account = await findUserByEmail(email);
+  if (!await verifyPassword(account, password)) {
+    return res.status(401).json({
+      success: false,
+      message: 'Invalid email or password. If you have not registered on this store, choose Create Account.',
+    });
+  }
+  const user = await getUserById(account.id);
+  res.json({ success: true, data: { user, token: signToken(user) } });
+}));
 
 router.get(
   '/providers',

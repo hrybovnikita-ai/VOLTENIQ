@@ -1,0 +1,37 @@
+{
+  "roleName": "volteniqStoreRuntime",
+  "actions": [
+    {
+      "action": "FIND",
+      "resources": [
+        {
+          "db": "volteniq_store",
+          "collection": "categories"
+        },
+        {
+          "db": "volteniq_store",
+          "collection": "carts"
+        }
+      ]
+    },
+    {
+      "action": "INSERT",
+      "resources": [
+        {
+          "db": "volteniq_store",
+          "collection": "carts"
+        }
+      ]
+    },
+    {
+      "action": "UPDATE",
+      "resources": [
+        {
+          "db": "volteniq_store",
+          "collection": "carts"
+        }
+      ]
+    }
+  ],
+  "inheritedRoles": []
+}

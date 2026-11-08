@@ -21,9 +21,14 @@ export async function listFavorites(userId) {
   });
 }
 
+function missingProduct() {
+  return Object.assign(new Error('Product not found'), { status: 404 });
+}
+
 export async function toggleFavorite(userId, productId) {
   if (config.demoMode) {
     const store = await getDemoStore();
+    if (!store.products.some(product => product.id === productId)) throw missingProduct();
     const existing = store.favorites.find(
       (f) => f.userId === userId && f.productId === productId
     );
@@ -45,10 +50,15 @@ export async function toggleFavorite(userId, productId) {
   });
 
   if (existing) {
-    await prisma.favorite.delete({ where: { id: existing.id } });
+    await prisma.favorite.deleteMany({ where: { id: existing.id, userId } });
     return { favorited: false };
   }
 
-  await prisma.favorite.create({ data: { userId, productId } });
+  try {
+    await prisma.favorite.create({ data: { userId, productId } });
+  } catch (error) {
+    if (error.code === 'P2003') throw missingProduct();
+    if (error.code !== 'P2002') throw error;
+  }
   return { favorited: true };
 }

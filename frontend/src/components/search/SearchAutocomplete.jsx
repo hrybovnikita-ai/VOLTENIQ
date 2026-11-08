@@ -143,7 +143,7 @@ export default function SearchAutocomplete({
           }
           className={
             inputClassName ||
-            'w-full rounded-[14px] border border-silver/30 bg-white/60 dark:bg-graphite/60 pl-10 pr-4 py-2.5 text-sm outline-none focus:border-volt'
+            'w-full min-h-11 rounded-[14px] border border-silver/30 bg-white/60 dark:bg-graphite/60 pl-10 pr-4 py-2.5 text-sm outline-none focus:border-volt'
           }
         />
       </div>

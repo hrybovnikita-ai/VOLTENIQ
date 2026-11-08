@@ -32,3 +32,13 @@ macbook-pro-16-space-gray.jpg
   License: CC BY-SA 4.0
 
 Images were resized for web delivery; attribution still applies.
+
+User-provided catalog refresh (demo store assets)
+-------------------------------------------------
+macbook-air-13-midnight.png   — MacBook Air 13" primary / Midnight
+macbook-air-15-midnight.png   — MacBook Air 15" primary / Midnight
+macbook-pro-14-space-black.png — MacBook Pro 14" primary / Space Black
+macbook-pro-16-silver.png      — MacBook Pro 16" primary / Silver
+
+Also copied as size aliases:
+macbook-air-13-primary.png, macbook-air-15.png, macbook-pro-14.png, macbook-pro-16.png

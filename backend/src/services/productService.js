@@ -1,3 +1,4 @@
+import { mongo, mongoConfigured } from '../db/mongo.js';
 import { config } from '../config.js';
 import { prisma } from '../db/prisma.js';
 import { createId, getDemoStore, clone } from '../db/demoStore.js';
@@ -244,6 +245,15 @@ export async function suggestProducts(search = '', limit = 8) {
   };
 }
 
-export function getCategories() {
+export async function getCategories() {
+  if (mongoConfigured()) {
+    try {
+      const { db } = await mongo();
+      const rows = await db.collection('categories').find({}, { projection: { _id: 0, generation: 0, position: 0 } }).sort({ position: 1 }).toArray();
+      if (rows.length) return rows;
+    } catch {
+      // The built-in catalog taxonomy is available during Atlas outages.
+    }
+  }
   return categories;
 }
