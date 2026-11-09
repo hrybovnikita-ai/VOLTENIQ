@@ -11,3 +11,4 @@ backend/dist/
 .vercel/
 *.log
 .DS_Store
+.neon

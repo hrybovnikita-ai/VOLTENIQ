@@ -5,8 +5,11 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // Pooled Neon URL for app queries (hostname contains -pooler).
+  url       = env("DATABASE_URL")
+  // Direct Neon URL for migrations / introspection (neon env: DATABASE_URL_UNPOOLED).
+  directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 enum Role {

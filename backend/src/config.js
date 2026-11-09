@@ -1,7 +1,18 @@
 import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import dotenv from 'dotenv';
 
-dotenv.config({ path: fileURLToPath(new URL('../.env', import.meta.url)) });
+const backendDir = fileURLToPath(new URL('..', import.meta.url));
+const repoRoot = path.resolve(backendDir, '..');
+
+// Local app settings, then Neon `.env.local` wins for DATABASE_* and other Neon vars.
+dotenv.config({ path: path.join(backendDir, '.env') });
+dotenv.config({ path: path.join(repoRoot, '.env') });
+dotenv.config({ path: path.join(repoRoot, '.env.local'), override: true });
+
+if (!process.env.DATABASE_URL_UNPOOLED && process.env.DATABASE_URL) {
+  process.env.DATABASE_URL_UNPOOLED = process.env.DATABASE_URL;
+}
 
 const defaultOrigins = [
   'http://localhost:5173',
@@ -46,5 +57,7 @@ export const config = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   corsOrigin,
   databaseUrl: process.env.DATABASE_URL,
+  databaseUrlUnpooled: process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL,
+  neonBranch: process.env.NEON_BRANCH || null,
   firebaseProjectId: process.env.FIREBASE_PROJECT_ID || 'volteniq',
 };

@@ -121,6 +121,16 @@ npm run dev
 | `VITE_API_URL`   | API base path; use `/api` in production (same origin) |
 | `VITE_FIREBASE_*`| Optional Firebase web config        |
 
+## Neon Postgres
+
+Linked Neon project config lives in `neon.ts` / `.neon` (local). Secrets are pulled into ignored `.env.local` by `neon deploy` / `neon env pull`:
+
+- `DATABASE_URL` — pooled (`-pooler`) for the Express/Prisma app
+- `DATABASE_URL_UNPOOLED` — direct URL for `prisma db push` / migrate
+- `NEON_BRANCH`, `NEON_BRANCH_ID`, `NEON_FUNCTION_HOST_SUFFIX`
+
+Backend loads `backend/.env` then overrides with root `.env.local`. Apply schema with `npm run prisma:push --prefix backend` (uses the direct URL).
+
 ## Deploy on Vercel (Services)
 
 Vercel Services (Beta) deploys the Vite frontend and Express API as one project. Root `vercel.json` routes `/api/*` to `backend` and everything else to `frontend`, with SPA fallbacks for React Router (`/login`, `/signup`, `/catalog`, `/profile`, …).
