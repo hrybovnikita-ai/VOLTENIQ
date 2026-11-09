@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import jwt from 'jsonwebtoken';
+import { startSession, endSession } from '../services/sessionService.js';
 import { body } from 'express-validator';
 import { config } from '../config.js';
 import { validate } from '../middleware/validate.js';
@@ -16,14 +16,6 @@ import {
 } from '../services/userService.js';
 
 const router = Router();
-
-function signToken(user) {
-  return jwt.sign(
-    { userId: user.id, email: user.email, role: user.role, name: user.name },
-    config.jwtSecret,
-    { expiresIn: config.jwtExpiresIn }
-  );
-}
 
 function nameFromEmail(email) {
   const local = String(email || '').split('@')[0] || 'Member';
@@ -43,7 +35,8 @@ router.post('/register', [
 ], validate, asyncHandler(async (req, res) => {
   const { email, password } = req.body;
   const user = await createUser({ email, password, name: nameFromEmail(email) });
-  res.status(201).json({ success: true, data: { user, token: signToken(user) } });
+  await startSession(req, res, user.id);
+  res.status(201).json({ success: true, data: { user } });
 }));
 
 router.post('/login', [
@@ -59,7 +52,8 @@ router.post('/login', [
     });
   }
   const user = await getUserById(account.id);
-  res.json({ success: true, data: { user, token: signToken(user) } });
+  await startSession(req, res, user.id);
+  res.json({ success: true, data: { user } });
 }));
 
 router.get(
@@ -88,20 +82,25 @@ router.post(
       name: claims.name || nameFromEmail(claims.email),
       signInProvider: claims.signInProvider,
     });
-    const token = signToken(user);
+    await startSession(req, res, user.id);
     res.json({
       success: true,
       message: 'Signed in with Firebase',
-      data: { user, token },
+      data: { user },
     });
   })
 );
+
+router.post('/logout', asyncHandler(async (req, res) => {
+  await endSession(req, res);
+  res.json({ success: true });
+}));
 
 router.get(
   '/me',
   authenticate,
   asyncHandler(async (req, res) => {
-    const user = await getUserById(req.user.id);
+    const user = req.user;
     res.json({ success: true, data: { user } });
   })
 );
@@ -111,7 +110,7 @@ router.put(
   authenticate,
   [
     body('name').optional().trim().isLength({ min: 2 }).withMessage('Name must be at least 2 characters'),
-    body('password').optional().isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+    body('password').optional().isString().isByteLength({ max: 72 }).isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
   ],
   validate,
   asyncHandler(async (req, res) => {

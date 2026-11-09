@@ -4,18 +4,11 @@ const API_URL = import.meta.env.VITE_API_URL || '/api'
 
 export const http = axios.create({
   baseURL: API_URL,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
   timeout: 15000,
-})
-
-http.interceptors.request.use((config) => {
-  const token = localStorage.getItem('volteniq_token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  return config
 })
 
 http.interceptors.response.use(
@@ -61,6 +54,7 @@ export const api = {
   compareProducts: (ids) =>
     request('get', '/products/compare', { params: { ids: ids.join(',') } }),
   login: (body) => request('post', '/auth/login', { data: body }),
+  logout: () => request('post', '/auth/logout'),
   register: (body) => request('post', '/auth/register', { data: body }),
   firebaseSession: (body) => request('post', '/auth/firebase', { data: body }),
   authProviders: () => request('get', '/auth/providers'),

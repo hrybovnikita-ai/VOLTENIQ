@@ -14,7 +14,7 @@ export default function AuthLayout({ title, subtitle, children, footer }) {
           </Link>
         </div>
 
-        <div className="auth-card rounded-[16px] p-4 xs:p-5 sm:p-8">
+        <div className="auth-card p-4 xs:p-5 sm:p-8">
           <h1 className="font-display text-[1.55rem] sm:text-[1.75rem] font-bold text-snow tracking-tight">
             {title}
           </h1>

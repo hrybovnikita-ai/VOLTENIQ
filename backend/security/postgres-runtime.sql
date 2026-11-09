@@ -7,11 +7,12 @@ CREATE ROLE volteniq_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
 GRANT CONNECT ON DATABASE :"DBNAME" TO volteniq_runtime;
 GRANT USAGE ON SCHEMA public TO volteniq_runtime;
 GRANT SELECT ON public."User", public."Product", public."Favorite", public."Order",
-  public."OrderItem", public."PriceAlert", public."PriceHistory", public."Notification" TO volteniq_runtime;
+  public."OrderItem", public."PriceAlert", public."PriceHistory", public."Notification",
+  public."Session" TO volteniq_runtime;
 GRANT INSERT (id, name, email, password, "googleId", "firebaseUid", "createdAt", "updatedAt"),
   UPDATE (name, password, "googleId", "firebaseUid", "updatedAt") ON public."User" TO volteniq_runtime;
 GRANT INSERT, UPDATE, DELETE ON public."Product" TO volteniq_runtime;
-GRANT INSERT, DELETE ON public."Favorite", public."PriceAlert" TO volteniq_runtime;
+GRANT INSERT, DELETE ON public."Favorite", public."PriceAlert", public."Session" TO volteniq_runtime;
 GRANT INSERT ON public."Order", public."OrderItem", public."PriceHistory" TO volteniq_runtime;
 GRANT UPDATE (status, "updatedAt") ON public."Order" TO volteniq_runtime;
 DO $$

@@ -4,8 +4,8 @@ import { prisma } from '../db/prisma.js';
 
 function sanitize(user) {
   if (!user) return null;
-  const { password, ...safe } = user;
-  return safe;
+  const { id, name, email, role, createdAt, updatedAt } = user;
+  return { id, name, email, role, createdAt, updatedAt };
 }
 
 export async function findUserByEmail(email) {
@@ -103,7 +103,7 @@ export async function findOrCreateFirebaseUser({
 }
 
 export async function verifyPassword(user, password) {
-  if (!user?.password || !password) return false;
+  if (!user?.password || !password || Buffer.byteLength(password, 'utf8') > 72) return false;
   if (user.googleId && user.password?.startsWith('GOOGLE_ONLY')) return false;
   return bcrypt.compare(password, user.password);
 }

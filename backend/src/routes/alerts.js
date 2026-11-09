@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { body, param } from 'express-validator';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, requireAdmin } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import {
   getPriceHistory,
@@ -87,6 +87,7 @@ router.delete(
 router.post(
   '/demo-drop/:productId',
   authenticate,
+  requireAdmin,
   [param('productId').notEmpty(), validate],
   async (req, res, next) => {
     try {

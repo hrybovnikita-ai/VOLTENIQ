@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 
-const inputClass =
-  'w-full rounded-[14px] border border-silver/25 bg-ink/40 text-snow placeholder:text-muted/70 px-4 py-2.5 pr-11 outline-none focus:border-volt transition'
+const inputClass = 'auth-input pr-11'
 
 export default function AuthPasswordField({
   id,

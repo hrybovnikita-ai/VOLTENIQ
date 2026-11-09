@@ -35,12 +35,24 @@ export async function createOrder(userId, payload) {
     const optionKeys = Array.isArray(product.options)
       ? product.options.map((o) => o.key)
       : ['color', 'storage', 'ram', 'size', 'chip', 'connectivity', 'material', 'band', 'model', 'case', 'compatible'];
-    const selections = {};
+    const declared = Array.isArray(product.options) ? product.options : [];
+    const selections = Object.create(null);
     for (const key of optionKeys) {
       if (item[key] != null && item[key] !== '') selections[key] = item[key];
     }
     if (item.configuration && typeof item.configuration === 'object') {
       Object.assign(selections, item.configuration);
+    }
+    if (declared.length) {
+      for (const key of Object.keys(selections)) {
+        if (!optionKeys.includes(key)) throw Object.assign(new Error('Unknown configuration option'), { status: 400 });
+      }
+      for (const { key, values } of declared) {
+        selections[key] ??= values[0];
+        if (!values.includes(selections[key])) {
+          throw Object.assign(new Error('Unsupported ' + key + ' option for ' + product.name), { status: 400 });
+        }
+      }
     }
     // Server recalculates unit price from variants — never trusts a pre-multiplied total
     const unitPrice = getUnitPrice(product, selections);
@@ -133,6 +145,7 @@ export async function createOrder(userId, payload) {
             storage: li.storage,
             ram: li.ram,
             size: li.size,
+            configuration: { ...li.configuration },
           })),
         },
       },

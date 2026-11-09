@@ -20,7 +20,17 @@ enum OrderStatus {
   CANCELLED
 }
 
+model Session {
+  id        String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  @@index([userId])
+  @@index([expiresAt])
+}
+
 model User {
+  sessions         Session[]
   id               String             @id @default(cuid())
   name             String
   email            String             @unique
@@ -164,6 +174,7 @@ model OrderItem {
   storage   String?
   ram       String?
   size      String?
+  configuration Json?
 }
 
 model Favorite {

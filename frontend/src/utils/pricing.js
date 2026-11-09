@@ -168,3 +168,21 @@ export function getOptionPriceHints(product, optionKey, formatPrice) {
   }
   return hints
 }
+
+const variants = [
+  'color',
+  'storage',
+  'ram',
+  'size',
+  'chip',
+  'connectivity',
+  'material',
+  'band',
+  'model',
+  'case',
+  'compatible',
+  'layout',
+]
+export const cartSelections = (item) =>
+  Object.fromEntries(variants.filter((key) => item[key]).map((key) => [key, item[key]]))
+

@@ -20,31 +20,48 @@ assert(process.env.DATABASE_URL !== pgUrl.href, 'QA_DATABASE_URL must not reuse 
 assert(process.env.MONGODB_URI !== mongoUrl.href, 'QA_MONGODB_URI must not reuse MONGODB_URI');
 const pg = new PrismaClient({ datasourceUrl: pgUrl.href });
 const mongo = new MongoClient(mongoUrl.href);
-const jwtSecret = randomUUID() + randomUUID();
-let child, origin;
+let child, origin, sessionCookie = '';
+
 async function start() {
   child = spawn(process.execPath, ['--input-type=module', '-e',
     "import app from './src/app.js'; const s=app.listen(0,'127.0.0.1',()=>process.send(s.address().port));"],
-    { env: { ...process.env, DATABASE_URL: pgUrl.href, MONGODB_URI: mongoUrl.href, DEMO_MODE: 'false', JWT_SECRET: jwtSecret },
+    { env: { ...process.env, DATABASE_URL: pgUrl.href, MONGODB_URI: mongoUrl.href, DEMO_MODE: 'false' },
       stdio: ['ignore','ignore','ignore','ipc'] });
   const port = await Promise.race([once(child,'message').then(([port]) => port),
     once(child,'exit').then(() => { throw new Error('Test API exited before startup'); }),
     delay(15000, null, { ref: false }).then(() => { throw new Error('Test API startup timed out'); })]);
   origin = 'http://127.0.0.1:' + port + '/api';
 }
+
 async function stop() {
   if (!child || child.exitCode !== null || child.signalCode) return;
   const finished = once(child,'exit');
   child.kill();
   await finished;
 }
-async function request(path, method, status, body, token) {
-  const res = await fetch(origin + path, { method, signal: AbortSignal.timeout(15000),
-    headers: { 'Content-Type':'application/json', ...(token && { Authorization:'Bearer '+token }) },
-    body: body && JSON.stringify(body) });
-  assert.equal(res.status, status, method+' '+path+' returned '+res.status);
+
+function rememberCookies(res) {
+  const setCookie = typeof res.headers.getSetCookie === 'function' ? res.headers.getSetCookie() : [];
+  if (!setCookie.length) return;
+  const parts = setCookie.map((value) => String(value).split(';')[0]).filter(Boolean);
+  if (parts.length) sessionCookie = parts.join('; ');
+}
+
+async function request(path, method, status, body, authed = false) {
+  const res = await fetch(origin + path, {
+    method,
+    signal: AbortSignal.timeout(15000),
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authed && sessionCookie ? { Cookie: sessionCookie } : {}),
+    },
+    body: body && JSON.stringify(body),
+  });
+  rememberCookies(res);
+  assert.equal(res.status, status, method + ' ' + path + ' returned ' + res.status);
   return res.json();
 }
+
 try {
   const [priv] = await pg.$queryRawUnsafe(`SELECT rolsuper, rolcreatedb, rolcreaterole,
     has_column_privilege(current_user,'public."User"','role','UPDATE') AS promote,
@@ -60,29 +77,33 @@ try {
   const suffix = randomUUID(), credentials = { email: suffix+'@example.test', password: randomUUID() };
   await request('/auth/register','POST',201,credentials);
   await request('/auth/register','POST',409,credentials);
-  const { data: { token, user } } = await request('/auth/login','POST',200,credentials);
+  sessionCookie = '';
+  const { data: { user } } = await request('/auth/login','POST',200,credentials);
+  assert.ok(sessionCookie.includes('volteniq_session='));
   const product = await pg.product.create({data:{name:'Test product',slug:suffix,description:'Fixture',category:'QA',price:12.5,stock:3,image:'test',images:[],colors:[],storage:[],specs:{}}});
   const favorite = productId => ({ productId });
   await request('/favorites/toggle','POST',401,favorite(product.id));
-  for (const invalid of [null,{},[],12,'  ','x'.repeat(101)]) await request('/favorites/toggle','POST',400,favorite(invalid),token);
-  const missing = await request('/favorites/toggle','POST',404,favorite(suffix),token);
+  for (const invalid of [null,{},[],12,'  ','x'.repeat(101)]) await request('/favorites/toggle','POST',400,favorite(invalid),true);
+  const missing = await request('/favorites/toggle','POST',404,favorite(suffix),true);
   assert.deepEqual(missing,{success:false,message:'Product not found'});
-  await request('/favorites/toggle','POST',200,favorite(product.id),token);
+  await request('/favorites/toggle','POST',200,favorite(product.id),true);
   const lines=[{productId:product.id,quantity:2,selection:{}}];
-  await request('/cart','PUT',200,{items:lines,version:0},token);
-  await request('/cart','PUT',409,{items:[],version:0},token);
-  const {data:{order}}=await request('/orders','POST',201,{items:lines,shipping:{name:'QA',address:'Test',city:'Test',zip:'00000'}},token);
+  await request('/cart','PUT',200,{items:lines,version:0},true);
+  await request('/cart','PUT',409,{items:[],version:0},true);
+  const {data:{order}}=await request('/orders','POST',201,{items:lines,shipping:{name:'QA',address:'Test',city:'Test',zip:'00000'}},true);
   assert.equal(order.total,25);
+  const persistedCookie = sessionCookie;
   await stop();
   await start();
-  assert.equal((await request('/auth/me','GET',200,null,token)).data.user.id,user.id);
-  assert.deepEqual((await request('/cart','GET',200,null,token)).data.items,lines);
-  assert((await request('/favorites','GET',200,null,token)).data.favorites.some(f=>f.productId===product.id));
-  assert.equal((await request('/orders/'+order.id,'GET',200,null,token)).data.order.total,25);
+  sessionCookie = persistedCookie;
+  assert.equal((await request('/auth/me','GET',200,null,true)).data.user.id,user.id);
+  assert.deepEqual((await request('/cart','GET',200,null,true)).data.items,lines);
+  assert((await request('/favorites','GET',200,null,true)).data.favorites.some(f=>f.productId===product.id));
+  assert.equal((await request('/orders/'+order.id,'GET',200,null,true)).data.order.total,25);
   assert.equal((await pg.product.findUniqueOrThrow({where:{id:product.id}})).stock,1);
-  assert.equal((await request('/favorites/toggle','POST',200,favorite(product.id),token)).data.favorited,false);
-  await request('/cart','PUT',200,{items:[],version:1},token);
-  await request('/admin/stats','GET',403,null,token);
+  assert.equal((await request('/favorites/toggle','POST',200,favorite(product.id),true)).data.favorited,false);
+  await request('/cart','PUT',200,{items:[],version:1},true);
+  await request('/admin/stats','GET',403,null,true);
   console.log('PASS restricted roles, favorites validation, signup/login, cart conflicts, checkout, restart, persistence and authorization.');
 } finally {
   await stop();

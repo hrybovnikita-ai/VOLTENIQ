@@ -11,7 +11,7 @@ const defaultOrigins = [
 
 const corsOrigin = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map((origin) => origin.trim()).filter(Boolean)
-  : defaultOrigins;
+  : process.env.NODE_ENV === 'production' ? [] : defaultOrigins;
 
 export const config = {
   port: Number(process.env.PORT) || 5004,

@@ -5,7 +5,6 @@ import {
   X,
   ShoppingBag,
   Heart,
-  User,
   Moon,
   Sun,
   GitCompareArrows,
@@ -62,13 +61,13 @@ export default function Navbar() {
     }`
 
   const iconBtn =
-    'items-center justify-center rounded-[12px] p-2.5 min-h-11 min-w-11 hover:bg-silver/20 transition'
+    'items-center justify-center rounded-[12px] p-2.5 min-h-11 min-w-11 border border-transparent hover:border-silver/20 hover:bg-white/30 dark:hover:bg-white/5 transition'
 
   const close = () => setOpen(false)
 
   return (
     <header className="sticky top-0 z-50">
-      <div className="border-b border-silver/20 bg-white/80 dark:bg-ink/80 backdrop-blur-xl">
+      <div className="glass-nav backdrop-blur-xl">
         <div className="container-shell">
           <div className="flex h-14 sm:h-16 items-center gap-2 sm:gap-3 min-w-0">
             <Link to="/" aria-label="VOLTENIQ home" className="flex items-center gap-2 shrink-0 min-w-0" onClick={close}>
@@ -96,7 +95,7 @@ export default function Navbar() {
               ))}
             </nav>
 
-            <div className="hidden md:flex flex-1 min-w-0 max-w-xl ml-auto">
+            <div className="hidden md:flex flex-1 min-w-0 max-w-2xl xl:max-w-3xl ml-auto">
               <SearchAutocomplete />
             </div>
 
@@ -143,25 +142,35 @@ export default function Navbar() {
               )}
 
               {user ? (
-                <div className="hidden sm:flex items-center gap-0.5">
-                  <Link to="/profile" className={`inline-flex ${iconBtn}`} aria-label="Profile">
-                    <User className="w-5 h-5" />
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={logout}
-                    className="text-xs font-semibold text-muted hover:text-volt px-2.5 min-h-11"
-                  >
-                    Log out
-                  </button>
-                </div>
+                <details className="relative" onBlur={e => {
+                  if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.open = false
+                }}>
+                  <summary aria-label="Account menu" className="grid h-10 w-10 cursor-pointer list-none place-items-center rounded-full bg-graphite text-sm font-bold text-volt [&::-webkit-details-marker]:hidden">
+                    {(user.name || user.email).slice(0, 1).toUpperCase()}
+                  </summary>
+                  <div className="glass-menu absolute right-0 top-12 z-50 w-52 p-2">
+                    <p className="truncate px-2 pb-2 text-xs text-muted">{user.email}</p>
+                    {[['Profile', '/profile'], ['Orders', '/profile#orders'], ['Settings', '/profile#settings']].map(([label, to]) => (
+                      <Link key={label} to={to} className="block rounded-lg p-2 hover:bg-volt/10 hover:text-volt" onClick={e => { e.currentTarget.closest('details').open = false }}>{label}</Link>
+                    ))}
+                    <button type="button" className="w-full rounded-lg p-2 text-left hover:bg-volt/10 hover:text-volt" onClick={() => { logout() }}>Log Out</button>
+                  </div>
+                </details>
               ) : (
-                <Link
-                  to="/login"
-                  className="hidden sm:inline-flex items-center text-sm font-semibold text-volt px-2.5 min-h-11"
-                >
-                  Sign in
-                </Link>
+                <div className="hidden sm:flex items-center gap-1">
+                  <Link
+                    to="/login"
+                    className="inline-flex items-center text-sm font-semibold text-ink/80 dark:text-snow/80 px-2.5 min-h-11 hover:text-volt"
+                  >
+                    Sign In
+                  </Link>
+                  <Link
+                    to="/signup"
+                    className="inline-flex items-center text-sm font-semibold text-volt px-2.5 min-h-11"
+                  >
+                    Sign Up
+                  </Link>
+                </div>
               )}
 
               <button
@@ -188,7 +197,7 @@ export default function Navbar() {
             />
             <div
               id="mobile-nav"
-              className="xl:hidden relative z-50 border-t border-silver/20 bg-white/95 dark:bg-ink/95 backdrop-blur-xl animate-slide-down"
+              className="glass-nav xl:hidden relative z-50 border-t border-silver/20 animate-slide-down"
             >
               <div className="container-shell py-4 space-y-4 max-h-[min(78dvh,36rem)] overflow-y-auto overscroll-contain">
                 <div className="md:hidden">
@@ -206,9 +215,28 @@ export default function Navbar() {
                   <NavLink to="/cart" className={linkClass} onClick={close}>
                     Bag
                   </NavLink>
-                  <NavLink to={user ? '/profile' : '/login'} className={linkClass} onClick={close}>
-                    {user ? 'Profile' : 'Sign in'}
-                  </NavLink>
+                  {user ? (
+                    <>
+                      <NavLink to="/profile" className={linkClass} onClick={close}>
+                        Profile
+                      </NavLink>
+                      <NavLink to="/profile#orders" className={linkClass} onClick={close}>
+                        Orders
+                      </NavLink>
+                      <NavLink to="/profile#settings" className={linkClass} onClick={close}>
+                        Settings
+                      </NavLink>
+                    </>
+                  ) : (
+                    <>
+                      <NavLink to="/login" className={linkClass} onClick={close}>
+                        Sign In
+                      </NavLink>
+                      <NavLink to="/signup" className={linkClass} onClick={close}>
+                        Sign Up
+                      </NavLink>
+                    </>
+                  )}
                   {isAdmin && (
                     <NavLink to="/admin" className={linkClass} onClick={close}>
                       Admin
@@ -223,7 +251,7 @@ export default function Navbar() {
                         close()
                       }}
                     >
-                      Log out
+                      Log Out
                     </button>
                   )}
                 </nav>

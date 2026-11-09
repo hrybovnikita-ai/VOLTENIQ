@@ -17,10 +17,10 @@ app.use(
   cors({
     origin(origin, callback) {
       // Allow non-browser tools (no Origin) and configured Vite ports
-      if (!origin || config.corsOrigin.includes(origin) || config.corsOrigin.includes('*')) {
+      if (!origin || config.corsOrigin.includes(origin)) {
         return callback(null, true);
       }
-      return callback(new Error(`CORS blocked for origin: ${origin}`));
+      return callback(Object.assign(new Error('Origin is not allowed'), { status: 403 }));
     },
     credentials: true,
   })
@@ -37,7 +37,7 @@ app.get('/api/health', (req, res) => {
 });
 
 app.use('/api/cart', cartRoutes);
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', (_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); }, authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/favorites', favoriteRoutes);

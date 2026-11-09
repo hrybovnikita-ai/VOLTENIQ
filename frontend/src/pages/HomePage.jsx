@@ -14,6 +14,7 @@ import {
 import { api } from '../api/client'
 import { useApi } from '../hooks/useApi'
 import ProductCard from '../components/products/ProductCard'
+import FeaturedShowcase from '../components/home/FeaturedShowcase'
 import Button from '../components/ui/Button'
 import Spinner from '../components/ui/Spinner'
 import ErrorState from '../components/ui/ErrorState'
@@ -44,6 +45,7 @@ export default function HomePage() {
     <div className="w-full min-w-0">
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 hero-grid pointer-events-none" />
+        <div className="hero-glow" aria-hidden="true" />
         <div className="container-shell pt-8 pb-10 sm:pt-14 sm:pb-16 lg:pt-20 lg:pb-24 relative">
           <div className="max-w-3xl min-w-0">
             <p className="animate-fade-up text-volt font-semibold tracking-[0.18em] uppercase text-[11px] sm:text-xs mb-3 sm:mb-4">
@@ -66,13 +68,13 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="mt-9 sm:mt-12 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 max-w-4xl">
+          <div className="mt-9 sm:mt-12 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 max-w-5xl">
             {[
               { icon: Zap, title: 'Curated catalog', text: 'Realistic Apple-inspired product lineup' },
               { icon: ShieldCheck, title: 'Safe demo checkout', text: 'No cards. No charges. Demo only.' },
               { icon: Sparkles, title: 'AI shopping UI', text: 'Assistant available from navigation' },
             ].map(({ icon: Icon, title, text }) => (
-              <div key={title} className="glass rounded-[16px] p-4 sm:p-5 min-w-0">
+              <div key={title} className="glass glass-hover rounded-[16px] p-4 sm:p-5 min-w-0">
                 <Icon className="w-5 h-5 text-volt mb-2.5" />
                 <h3 className="font-semibold mb-1 text-sm sm:text-base">{title}</h3>
                 <p className="text-sm text-muted leading-snug">{text}</p>
@@ -105,7 +107,7 @@ export default function HomePage() {
               <Link
                 key={cat.id}
                 to={`/catalog?category=${encodeURIComponent(cat.id)}`}
-                className="glass rounded-[16px] p-3.5 sm:p-4 text-center hover:glow-orange transition group min-w-0"
+                className="glass glass-hover rounded-[16px] p-3.5 sm:p-4 text-center transition group min-w-0"
               >
                 <Icon className="w-5 h-5 sm:w-6 sm:h-6 mx-auto mb-2 text-volt group-hover:scale-110 transition" />
                 <span className="text-xs sm:text-sm font-semibold truncate block">{cat.name}</span>
@@ -114,6 +116,10 @@ export default function HomePage() {
           })}
         </div>
       </section>
+
+      {!loading && !error && products.length > 0 ? (
+        <FeaturedShowcase products={products} />
+      ) : null}
 
       <section className="container-shell pb-12 sm:pb-16 lg:pb-20">
         <div className="flex items-end justify-between gap-3 mb-5 sm:mb-7">

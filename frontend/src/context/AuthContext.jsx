@@ -1,29 +1,19 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
+import Spinner from '../components/ui/Spinner'
 
 const AuthContext = createContext(null)
-const TOKEN_KEY = 'volteniq_token'
 
-async function firebaseSession(method, credentials) {
+async function googleSession() {
   const { auth, googleProvider, mapFirebaseAuthError } = await import('../lib/firebase')
-  const { signInWithPopup, signInWithEmailAndPassword } = await import('firebase/auth')
-  let timer
+  const { signInWithPopup, signOut } = await import('firebase/auth')
   try {
-    const exchange = async () => {
-      const credential = method === 'google'
-        ? await signInWithPopup(auth, googleProvider)
-        : await signInWithEmailAndPassword(auth, credentials.email, credentials.password)
-      return api.firebaseSession({ idToken: await credential.user.getIdToken() })
-    }
-    const timeout = new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error('Sign-in timed out. Please try again.')),
-        method === 'google' ? 120000 : 20000)
-    })
-    return await Promise.race([exchange(), timeout])
+    const { user } = await signInWithPopup(auth, googleProvider)
+    return await api.firebaseSession({ idToken: await user.getIdToken() })
   } catch (error) {
     throw new Error(mapFirebaseAuthError(error), { cause: error })
   } finally {
-    clearTimeout(timer)
+    await signOut(auth)
   }
 }
 
@@ -35,53 +25,67 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const version = revision.current
     let active = true
-    const token = localStorage.getItem(TOKEN_KEY)
-    if (!token) {
-      setLoading(false)
-      return
+
+    // Legacy JWT storage is never used for auth; clear any leftover value.
+    localStorage.removeItem('volteniq_token')
+
+    api
+      .me()
+      .then(({ data }) => {
+        if (active && version === revision.current) setUser(data.user)
+      })
+      .catch(() => {
+        if (active && version === revision.current) setUser(null)
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+
+    return () => {
+      active = false
     }
-    api.me().then(({ data }) => {
-      if (active && version === revision.current) setUser(data.user)
-    }).catch((error) => {
-      if (active && version === revision.current && error.status === 401) {
-        localStorage.removeItem(TOKEN_KEY)
-      }
-    }).finally(() => {
-      if (active) setLoading(false)
-    })
-    return () => { active = false }
   }, [])
 
   function saveSession({ data }) {
-    revision.current++
-    localStorage.setItem(TOKEN_KEY, data.token)
+    revision.current += 1
     setUser(data.user)
     return data.user
   }
 
   async function login(email, password) {
-    const credentials = { email, password }
-    try {
-      return saveSession(await api.login(credentials))
-    } catch (error) {
-      if (error.provider !== 'firebase') throw error
-      return saveSession(await firebaseSession('password', credentials))
-    }
+    return saveSession(await api.login({ email, password }))
   }
 
-  const register = async ({ email, password }) => saveSession(await api.register({ email, password }))
-  const loginWithGoogle = async () => saveSession(await firebaseSession('google'))
+  async function register({ email, password }) {
+    return saveSession(await api.register({ email, password }))
+  }
+
+  async function loginWithGoogle() {
+    return saveSession(await googleSession())
+  }
 
   async function logout() {
-    revision.current++
-    localStorage.removeItem(TOKEN_KEY)
-    setUser(null)
+    revision.current += 1
+    try {
+      await api.logout()
+    } finally {
+      setUser(null)
+    }
   }
 
   async function updateProfileInfo(payload) {
     const { data } = await api.updateProfile(payload)
     setUser(data.user)
     return data.user
+  }
+
+  if (loading) {
+    return (
+      <div role="status" className="flex min-h-screen flex-col items-center justify-center gap-3 bg-snow text-ink dark:bg-ink dark:text-snow">
+        <Spinner />
+        <p className="text-sm text-muted">Checking your session…</p>
+      </div>
+    )
   }
 
   return (

@@ -62,6 +62,7 @@ function OptionGroup({ label, options, value, onChange, priceHints, optionKey })
             <button
               key={option}
               type="button"
+              aria-pressed={value === option}
               onClick={() => onChange(option)}
               className={`rounded-full px-3.5 sm:px-4 py-2 text-sm border transition min-h-10 touch-manipulation ${
                 value === option ? 'border-volt bg-volt/15' : 'border-silver/30'
@@ -194,10 +195,10 @@ export default function ProductDetailPage() {
               <span className="text-sm text-muted">
                 Total ({safeQty} × {formatPrice(unitPrice)})
               </span>
-              <span className="text-xl font-bold text-volt">{formatPrice(lineTotal)}</span>
+              <span key={lineTotal} aria-live="polite" className="configuration-price text-xl font-bold text-volt">{formatPrice(lineTotal)}</span>
             </div>
             <p className="text-xs text-muted">
-              Demo pricing updates with selected options. Not official Apple prices.
+              Demo prices in USD. Storage and memory selections update your total.
             </p>
           </div>
 

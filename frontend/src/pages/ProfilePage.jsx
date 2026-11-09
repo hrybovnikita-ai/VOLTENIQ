@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { formatDate, formatPrice } from '../utils/format'
@@ -19,6 +19,10 @@ export default function ProfilePage() {
   const [error, setError] = useState('')
   const [params] = useSearchParams()
   const navigate = useNavigate()
+  const { hash } = useLocation()
+  useEffect(() => {
+    if (hash) document.getElementById(hash.slice(1))?.scrollIntoView()
+  }, [hash, loading])
   const highlight = params.get('order')
 
   useEffect(() => {
@@ -101,7 +105,7 @@ export default function ProfilePage() {
       )}
 
       <div className="split-layout split-layout--profile">
-        <form onSubmit={onSave} className="glass rounded-[16px] sm:rounded-[20px] p-4 sm:p-6 space-y-4 h-fit min-w-0">
+        <form id="settings" style={{ scrollMarginTop: 80 }} onSubmit={onSave} className="glass rounded-[16px] sm:rounded-[20px] p-4 sm:p-6 space-y-4 h-fit min-w-0">
           <h2 className="font-display text-xl font-bold">Account</h2>
           <div>
             <label className="block text-sm font-medium mb-1.5">Name</label>
@@ -184,7 +188,7 @@ export default function ProfilePage() {
             ) : null}
           </section>
 
-          <section>
+          <section id="orders" style={{ scrollMarginTop: 80 }}>
             <h2 className="font-display text-xl font-bold mb-4">Order history</h2>
             {!loading && !orders.length && (
               <EmptyState

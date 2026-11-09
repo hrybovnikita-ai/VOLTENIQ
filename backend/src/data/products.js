@@ -1,3 +1,4 @@
+import { desktopProducts } from './desktops.js';
 import { iphoneProducts } from './iphones.js';
 
 function zeroMap(values) {
@@ -801,9 +802,11 @@ const otherProducts = [
 ];
 
 /** Full VOLTENIQ demo catalog */
-export const demoProducts = [...iphoneProducts, ...otherProducts];
+export const demoProducts = [...iphoneProducts, ...otherProducts, ...desktopProducts];
 
 export const categories = [
+  { id: 'iMac', name: 'iMac', description: 'All-in-one Retina desktops.', icon: 'Monitor' },
+  { id: 'Mac Studio', name: 'Mac Studio', description: 'Apple silicon workstations.', icon: 'Monitor' },
   { id: 'iPhone', name: 'iPhone', description: 'Phones for the VOLTENIQ demo store.', icon: 'Smartphone' },
   { id: 'MacBook', name: 'MacBook', description: 'Notebook demos with sample pricing.', icon: 'Laptop' },
   { id: 'iPad', name: 'iPad', description: 'Tablet lineup for browsing and compare.', icon: 'Tablet' },

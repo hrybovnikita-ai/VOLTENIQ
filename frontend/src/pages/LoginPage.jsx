@@ -1,24 +1,24 @@
 import { useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AuthLayout from '../components/auth/AuthLayout'
 import AuthPasswordField from '../components/auth/AuthPasswordField'
 import GoogleSignInButton from '../components/auth/GoogleSignInButton'
 import Button from '../components/ui/Button'
 
-const inputClass =
-  'w-full rounded-[14px] border border-silver/25 bg-ink/40 text-snow placeholder:text-muted/70 px-4 py-2.5 outline-none focus:border-volt transition'
+const inputClass = 'auth-input'
 
 export default function LoginPage() {
-  const { login, loginWithGoogle } = useAuth()
-  const navigate = useNavigate()
+  const { login, loginWithGoogle, isAuthenticated } = useAuth()
   const location = useLocation()
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const redirectAfterAuth = () => {
-    navigate('/', { replace: true })
+  const from = location.state?.from
+  if (isAuthenticated) {
+    const target = typeof from === 'string' && /^\/(?![/\\])/.test(from) ? from : '/'
+    return <Navigate to={target} replace />
   }
 
   const onSubmit = async (e) => {
@@ -27,7 +27,6 @@ export default function LoginPage() {
     setError('')
     try {
       await login(form.email.trim(), form.password)
-      redirectAfterAuth()
     } catch (err) {
       setError(err.message || 'Sign in failed')
     } finally {
@@ -98,8 +97,7 @@ export default function LoginPage() {
           setError('')
           try {
             await loginWithGoogle()
-            redirectAfterAuth()
-          } catch (err) {
+                } catch (err) {
             setError(err.message || 'Google sign-in failed')
           } finally {
             setLoading(false)

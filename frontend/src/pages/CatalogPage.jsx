@@ -68,20 +68,20 @@ export default function CatalogPage() {
         </p>
       </div>
 
-      <div className="glass rounded-[16px] p-3 sm:p-4 mb-5 sm:mb-6 flex flex-col sm:flex-row gap-3 sm:items-center">
+      <div className="glass glass-panel rounded-[16px] p-3 sm:p-4 mb-5 sm:mb-6 flex flex-col sm:flex-row gap-3 sm:items-center">
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
           <input
             value={filters.search}
             onChange={(e) => updateFilter('search', e.target.value)}
             placeholder="Search iPhone, MacBook, Headphones..."
-            className="w-full min-h-11 rounded-[14px] border border-silver/30 bg-white/50 dark:bg-graphite/50 pl-10 pr-4 py-2.5 text-sm outline-none focus:border-volt"
+            className="glass-input w-full min-h-11 pl-10 pr-4 py-2.5 text-sm"
           />
         </div>
         <select
           value={filters.sort}
           onChange={(e) => updateFilter('sort', e.target.value)}
-          className="w-full sm:w-auto sm:min-w-[12rem] min-h-11 rounded-[14px] border border-silver/30 bg-white/50 dark:bg-graphite/50 px-4 py-2.5 text-sm outline-none focus:border-volt"
+          className="glass-input w-full sm:w-auto sm:min-w-[12rem] min-h-11 px-4 py-2.5 text-sm"
         >
           {SORT_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>

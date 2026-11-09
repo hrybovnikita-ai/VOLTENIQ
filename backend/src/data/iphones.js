@@ -377,7 +377,12 @@ export const iphoneProducts = [
     image: img.iphone16ProDesert,
     storage: ['128GB', '256GB', '512GB', '1TB'],
     colors: ['Desert Titanium', 'Black Titanium', 'White Titanium', 'Natural Titanium'],
-    colorImages: { ...IPHONE_16_PRO_COLOR_IMAGES },
+    colorImages: {
+      ...IPHONE_16_PRO_COLOR_IMAGES,
+      'Black Titanium': '/products/iphone-16-pro-black.png',
+      'Natural Titanium': '/products/iphone-16-pro-natural.png',
+      'White Titanium': '/products/iphone-16-pro-white.png',
+    },
     featured: true,
   }),
   phone({
@@ -436,6 +441,22 @@ export const iphoneProducts = [
     rating: 4.9,
   }),
 
+  phone({
+    name: 'iPhone 18 Pro',
+    slug: 'iphone-18-pro',
+    price: 1399,
+    storageStep: 200,
+    storage: ['256GB', '512GB', '1TB', '2TB'],
+    colors: ['Ice Blue', 'Burgundy', 'Blue', 'Black'],
+    colorImages: {
+      'Ice Blue': '/products/iphone-18-pro-ice-blue.png',
+      Burgundy: '/products/iphone-18-pro-burgundy.png',
+      Blue: '/products/iphone-18-pro-blue.png',
+      Black: '/products/iphone-18-pro-black.png',
+    },
+    concept: true,
+    description: 'A VOLTENIQ concept in four finishes with selectable storage. All prices are demo prices in USD.',
+  }),
   phone({
     name: 'iPhone 18 Pro Max',
     slug: 'iphone-18-pro-max',

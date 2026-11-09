@@ -1,8 +1,8 @@
 import { initializeApp } from 'firebase/app'
 import {
-  getAuth,
-  setPersistence,
-  browserLocalPersistence,
+  initializeAuth,
+  browserPopupRedirectResolver,
+  inMemoryPersistence,
   GoogleAuthProvider,
 } from 'firebase/auth'
 
@@ -26,13 +26,9 @@ if (missing.length) {
 }
 
 export const firebaseApp = initializeApp(firebaseConfig)
-export const auth = getAuth(firebaseApp)
+export const auth = initializeAuth(firebaseApp, { persistence: inMemoryPersistence, popupRedirectResolver: browserPopupRedirectResolver })
 export const googleProvider = new GoogleAuthProvider()
 googleProvider.setCustomParameters({ prompt: 'select_account' })
-
-setPersistence(auth, browserLocalPersistence).catch(() => {
-  // Persistence falls back to default browser session if local storage is blocked.
-})
 
 export function mapFirebaseAuthError(error) {
   const code = error?.code || ''

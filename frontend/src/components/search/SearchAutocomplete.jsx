@@ -143,7 +143,7 @@ export default function SearchAutocomplete({
           }
           className={
             inputClassName ||
-            'w-full min-h-11 rounded-[14px] border border-silver/30 bg-white/60 dark:bg-graphite/60 pl-10 pr-4 py-2.5 text-sm outline-none focus:border-volt'
+            'glass-input w-full min-h-11 pl-10 pr-4 py-2.5 text-sm outline-none'
           }
         />
       </div>
@@ -152,7 +152,7 @@ export default function SearchAutocomplete({
         <div
           id={listId}
           role="listbox"
-          className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-[60] max-h-80 overflow-y-auto rounded-[16px] border border-silver/20 bg-[#1a1a1a] text-snow shadow-[0_20px_50px_rgba(0,0,0,0.45)] scrollbar-thin"
+          className="glass-menu absolute left-0 right-0 top-[calc(100%+0.5rem)] z-[60] max-h-80 overflow-y-auto text-ink dark:text-snow scrollbar-thin"
         >
           <p className="px-4 pt-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-silver/70">
             Suggested products
@@ -179,10 +179,10 @@ export default function SearchAutocomplete({
                   onMouseEnter={() => setActiveIndex(index)}
                   onClick={() => goProduct(product)}
                   className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition ${
-                    active ? 'bg-volt/15' : 'hover:bg-white/5'
+                    active ? 'bg-volt/15' : 'hover:bg-volt/10'
                   }`}
                 >
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-[10px] bg-graphite">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-silver/15 bg-white/40 dark:bg-graphite/80">
                     <img
                       src={product.image}
                       alt=""
@@ -192,7 +192,7 @@ export default function SearchAutocomplete({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
-                      <span className="truncate text-sm font-semibold text-snow">
+                      <span className="truncate text-sm font-semibold text-ink dark:text-snow">
                         {product.name}
                       </span>
                       {product.concept ? (
@@ -212,7 +212,7 @@ export default function SearchAutocomplete({
 
           <button
             type="submit"
-            className="sticky bottom-0 w-full border-t border-white/10 bg-[#141414] px-4 py-3 text-left text-xs font-semibold text-volt hover:bg-white/5"
+            className="sticky bottom-0 w-full border-t border-silver/15 bg-white/40 px-4 py-3 text-left text-xs font-semibold text-volt backdrop-blur-md hover:bg-volt/10 dark:bg-ink/55"
           >
             View all results for “{query.trim()}”
           </button>

@@ -71,7 +71,7 @@ export default function PriceRangeFilter({ minPrice, maxPrice, onChange }) {
   const fillRight = (sliderMax / SLIDER_MAX) * 100
 
   return (
-    <section className="glass rounded-[16px] p-4 sm:p-5 mb-5 sm:mb-6">
+    <section className="glass glass-panel rounded-[16px] p-4 sm:p-5 mb-5 sm:mb-6">
       <div className="flex items-end justify-between gap-3 mb-4">
         <div>
           <h2 className="font-display text-lg sm:text-xl font-bold">Price Range</h2>
@@ -94,7 +94,7 @@ export default function PriceRangeFilter({ minPrice, maxPrice, onChange }) {
             onKeyDown={(e) => {
               if (e.key === 'Enter') commit(draftMin, draftMax)
             }}
-            className="w-full rounded-full border border-silver/30 bg-white/50 dark:bg-graphite/50 px-4 py-2.5 text-sm outline-none focus:border-volt"
+            className="glass-input w-full rounded-full px-4 py-2.5 text-sm"
           />
         </label>
         <label className="block min-w-0">
@@ -110,7 +110,7 @@ export default function PriceRangeFilter({ minPrice, maxPrice, onChange }) {
             onKeyDown={(e) => {
               if (e.key === 'Enter') commit(draftMin, draftMax)
             }}
-            className="w-full rounded-full border border-silver/30 bg-white/50 dark:bg-graphite/50 px-4 py-2.5 text-sm outline-none focus:border-volt"
+            className="glass-input w-full rounded-full px-4 py-2.5 text-sm"
           />
         </label>
       </div>

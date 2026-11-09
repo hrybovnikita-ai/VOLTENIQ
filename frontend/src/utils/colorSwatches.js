@@ -1,5 +1,7 @@
 /** Approximate finish chips for demo color pickers */
 const SWATCHES = {
+  'Ice Blue': '#c2cfe0',
+  Burgundy: '#64333f',
   Purple: '#b7a0d9',
   'Deep Purple': '#5c2a3a',
   'Space Gray': '#4a4d51',

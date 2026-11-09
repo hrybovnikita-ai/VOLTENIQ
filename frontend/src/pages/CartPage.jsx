@@ -3,7 +3,7 @@ import { Trash2, Zap } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
 import { formatPrice } from '../utils/format'
-import { formatVariantLabel, getLineTotal } from '../utils/pricing'
+import { cartSelections, formatVariantLabel, getLineTotal } from '../utils/pricing'
 import { beginCheckout } from '../utils/purchaseIntent'
 import Button from '../components/ui/Button'
 import EmptyState from '../components/ui/EmptyState'
@@ -61,7 +61,7 @@ export default function CartPage() {
                         {item.name}
                       </Link>
                       <p className="text-xs text-muted mt-1 break-words">
-                        {formatVariantLabel(item) || 'Standard config'}
+                        {formatVariantLabel(cartSelections(item)) || 'Standard config'}
                       </p>
                     </div>
                     <div className="text-right shrink-0 sm:hidden">

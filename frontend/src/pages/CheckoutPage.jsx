@@ -4,7 +4,7 @@ import { ArrowLeft, CreditCard, ShieldCheck, Wallet } from 'lucide-react'
 import { useCart } from '../context/CartContext'
 import { api } from '../api/client'
 import { clearPurchaseIntent, loadPurchaseIntent } from '../utils/purchaseIntent'
-import { getLineTotal } from '../utils/pricing'
+import { cartSelections as selections, getLineTotal } from '../utils/pricing'
 import {
   PAYMENT_METHODS,
   assertNoCardSecrets,
@@ -21,22 +21,7 @@ import Button from '../components/ui/Button'
 import EmptyState from '../components/ui/EmptyState'
 import './Checkout.css'
 
-const variants = [
-  'color',
-  'storage',
-  'ram',
-  'size',
-  'chip',
-  'connectivity',
-  'material',
-  'band',
-  'model',
-  'case',
-  'compatible',
-]
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
-const selections = (item) =>
-  Object.fromEntries(variants.filter((key) => item[key]).map((key) => [key, item[key]]))
 
 function Field({
   id,

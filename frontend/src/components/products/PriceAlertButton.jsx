@@ -6,7 +6,7 @@ import { useAuth } from '../../context/AuthContext'
 import Button from '../ui/Button'
 
 export default function PriceAlertButton({ product, onPriceChanged }) {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, isAdmin } = useAuth()
   const navigate = useNavigate()
   const [alert, setAlert] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -99,14 +99,14 @@ export default function PriceAlertButton({ product, onPriceChanged }) {
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <BellOff className="w-4 h-4" />}
             Alert active · Unsubscribe
           </Button>
-          <Button
+          {isAdmin && <Button
             variant="ghost"
             className="w-full sm:w-auto justify-center"
             disabled={loading}
             onClick={simulateDrop}
           >
             Simulate demo drop
-          </Button>
+          </Button>}
         </div>
       ) : (
         <Button

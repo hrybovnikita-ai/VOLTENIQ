@@ -16,11 +16,13 @@ export async function verifyFirebaseIdToken(idToken) {
 
   try {
     const { payload } = await jwtVerify(idToken, JWKS, {
+      algorithms: ['RS256'],
+      requiredClaims: ['exp', 'iat', 'sub'],
       audience: config.firebaseProjectId,
       issuer: `https://securetoken.google.com/${config.firebaseProjectId}`,
     });
 
-    if (!payload.sub || !payload.email) {
+    if (!payload.sub || !payload.email || payload.email_verified !== true || payload.firebase?.sign_in_provider !== 'google.com') {
       const err = new Error('Firebase token is missing required claims');
       err.status = 401;
       throw err;
