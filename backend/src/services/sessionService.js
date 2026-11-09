@@ -4,14 +4,20 @@ import { config } from '../config.js';
 
 export const SESSION_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
 
-const secure = config.nodeEnv === 'production';
-export const SESSION_COOKIE_NAME = secure ? '__Host-volteniq_session' : 'volteniq_session';
+const secure = config.nodeEnv === 'production' || config.isVercel;
+const crossSite = process.env.SESSION_SAME_SITE === 'none';
+
+// Same-origin production (frontend + /api rewrite) uses __Host- cookies.
+// Cross-site only: set SESSION_SAME_SITE=none (requires Secure; cannot use __Host-).
+export const SESSION_COOKIE_NAME = secure && !crossSite
+  ? '__Host-volteniq_session'
+  : 'volteniq_session';
 
 const cookieOptions = {
   httpOnly: true,
   secure,
   path: '/',
-  sameSite: secure && process.env.SESSION_SAME_SITE === 'none' ? 'none' : 'lax',
+  sameSite: crossSite ? 'none' : 'lax',
 };
 
 const digest = (token) => createHash('sha256').update(token).digest('hex');

@@ -1,4 +1,13 @@
 frontend/.env
+frontend/.env.local
 backend/.env
+backend/.env.local
 .env
+.env.local
+.env*.local
 node_modules/
+frontend/dist/
+backend/dist/
+.vercel/
+*.log
+.DS_Store

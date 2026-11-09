@@ -13,10 +13,13 @@ import chatRoutes from './routes/chats.js';
 
 const app = express();
 
+// Required behind Vercel / reverse proxies so Secure cookies and IPs work.
+app.set('trust proxy', 1);
+
 app.use(
   cors({
     origin(origin, callback) {
-      // Allow non-browser tools (no Origin) and configured Vite ports
+      // Same-origin browser calls and non-browser tools may omit Origin.
       if (!origin || config.corsOrigin.includes(origin)) {
         return callback(null, true);
       }

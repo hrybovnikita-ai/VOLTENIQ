@@ -100,23 +100,64 @@ npm run dev
 
 ## Environment variables
 
-### Backend (`backend/.env`)
+### Backend (`backend/.env` / Vercel)
 
 | Variable        | Description                                      |
 |-----------------|--------------------------------------------------|
-| `PORT`          | API port (default `5004`)                        |
+| `PORT`          | API port locally (default `5004`; ignored on Vercel) |
 | `DEMO_MODE`     | `true` = in-memory store; `false` = Prisma/PG    |
-| `DATABASE_URL`  | PostgreSQL connection string                     |
-| `JWT_SECRET`    | Secret for signing JWTs                          |
-| `JWT_EXPIRES_IN`| Token lifetime (default `7d`)                    |
-| `CORS_ORIGIN`   | Allowed frontend origin                          |
+| `DATABASE_URL`  | PostgreSQL / Neon connection string (secret)     |
+| `JWT_SECRET`    | Strong secret (legacy fallback; sessions use cookies) |
+| `JWT_EXPIRES_IN`| Unused by cookie sessions (default `7d`)         |
+| `CORS_ORIGIN`   | Comma-separated allowed frontend origins         |
+| `SESSION_SAME_SITE` | Only set `none` for cross-site API hosts     |
+| `FIREBASE_PROJECT_ID` | Firebase project id for Google auth        |
+| `NODE_ENV`      | `production` on Vercel                           |
 
-### Frontend (`frontend/.env`)
+### Frontend (`frontend/.env` / Vercel build)
 
 | Variable         | Description                         |
 |------------------|-------------------------------------|
-| `VITE_API_URL`   | API base URL (`/api` via Vite proxy)|
+| `VITE_API_URL`   | API base path; use `/api` in production (same origin) |
+| `VITE_FIREBASE_*`| Optional Firebase web config        |
 
+## Deploy on Vercel (Services)
+
+Vercel Services (Beta) deploys the Vite frontend and Express API as one project. Root `vercel.json` routes `/api/*` to `backend` and everything else to `frontend`, with SPA fallbacks for React Router (`/login`, `/signup`, `/catalog`, `/profile`, …).
+
+### Exact steps
+
+1. Create a Neon (or other hosted) PostgreSQL database. Copy the **pooled** connection string with `sslmode=require`.
+2. From a machine that can reach Neon, apply the schema **without wiping data**:
+   ```bash
+   cd backend
+   DATABASE_URL="postgresql://..." npx prisma db push
+   # Optional only on an empty catalog:
+   # DATABASE_URL="postgresql://..." npm run prisma:seed
+   ```
+3. In [Vercel](https://vercel.com): **Add New Project** → import `hrybovnikita-ai/VOLTENIQ` → root directory stays the repo root (do not set Root Directory to `frontend`).
+4. Confirm Vercel detects `vercel.json` Services (`frontend` + `backend`).
+5. Project → **Settings → Environment Variables** (Production + Preview). Set:
+
+| Name | Service / notes |
+|------|-----------------|
+| `DATABASE_URL` | Backend; Neon pooled URL (secret) |
+| `DEMO_MODE` | `false` |
+| `JWT_SECRET` | Long random secret (secret) |
+| `CORS_ORIGIN` | Your production origin(s), e.g. `https://your-app.vercel.app` |
+| `FIREBASE_PROJECT_ID` | Optional; match Firebase |
+| `VITE_API_URL` | `/api` (frontend build) |
+| `VITE_FIREBASE_*` | Optional Firebase web keys |
+
+6. Do **not** commit `.env` files. Do **not** put `DATABASE_URL` or `JWT_SECRET` in the repo.
+7. Deploy (`git push` to `main` or **Deploy** in the dashboard).
+8. After deploy, verify:
+   - `GET https://<deployment>/api/health`
+   - Catalog loads
+   - `/login`, `/signup`, `/catalog`, `/profile` deep links
+   - Register → cookie session → `/api/auth/me` → cart
+
+Same-origin `/api` uses Secure HttpOnly `__Host-volteniq_session` cookies (`SameSite=Lax`). Preview URLs are also allowed when `VERCEL_URL` is present.
 ## API overview
 
 - `GET /api/health`
