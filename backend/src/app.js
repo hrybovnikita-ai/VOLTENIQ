@@ -1,8 +1,8 @@
 import express from 'express';
-import { clerkMiddleware } from '@clerk/express';
 import cors from 'cors';
 import { config } from './config.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
+import { createClerkFrontendProxyMiddleware } from './middleware/clerkFrontendProxy.js';
 import cartRoutes from './routes/cart.js';
 import authRoutes from './routes/auth.js';
 import productRoutes from './routes/products.js';
@@ -21,37 +21,14 @@ const app = express();
 app.set('trust proxy', 1);
 
 /**
- * Official Clerk Frontend API proxy must run before body parsers so OAuth
- * callbacks and clerk-js assets stream with the original request body.
- * Scoped to /__clerk so VOLTENIQ cookie sessions remain independent.
+ * Clerk Frontend API proxy must run before body parsers so OAuth callbacks
+ * and clerk-js assets stream with the original request body.
+ * Custom bridge (not @clerk/express setHeader loop) preserves every Set-Cookie
+ * — required for __client during Google OAuth. Scoped to /__clerk only.
  */
-if (config.clerkSecretKey && config.clerkPublishableKey) {
-  const clerkProxy = clerkMiddleware({
-    publishableKey: config.clerkPublishableKey,
-    secretKey: config.clerkSecretKey,
-    frontendApiProxy: {
-      enabled: true,
-      path: '/__clerk',
-    },
-  });
-
-  app.use((req, res, next) => {
-    const path = String(req.originalUrl || req.url || '').split('?')[0];
-    if (path !== '/__clerk' && !path.startsWith('/__clerk/')) {
-      return next();
-    }
-
-    // Keep the store session cookie out of Clerk FAPI forwarding.
-    if (req.headers.cookie) {
-      req.headers.cookie = req.headers.cookie
-        .split(';')
-        .map((part) => part.trim())
-        .filter((part) => part && !/^(?:__Host-)?volteniq_session=/.test(part))
-        .join('; ');
-    }
-
-    return clerkProxy(req, res, next);
-  });
+const clerkFrontendProxy = createClerkFrontendProxyMiddleware();
+if (clerkFrontendProxy) {
+  app.use(clerkFrontendProxy);
 }
 
 app.use(

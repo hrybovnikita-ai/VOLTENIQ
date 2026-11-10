@@ -6,6 +6,7 @@ backend/.env.local
 .env.local
 .env*.local
 .env.vercel*
+.env.clerk-restore
 node_modules/
 frontend/dist/
 backend/dist/
