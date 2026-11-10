@@ -80,6 +80,9 @@ function OptionGroup({ label, options, value, onChange, priceHints, optionKey })
   )
 }
 
+import CompleteSetup from '../components/products/CompleteSetup'
+import ProductExpert from '../components/products/ProductExpert'
+
 export default function ProductDetailPage() {
   const { id } = useParams()
   const [product, setProduct] = useState(null)
@@ -368,6 +371,8 @@ export default function ProductDetailPage() {
           )}
         </div>
       </div>
+      <ProductExpert key={product.id + JSON.stringify(selections)} product={product} selections={selections} unitPrice={unitPrice} />
+      <CompleteSetup key={product.id} product={product} selections={selections} unitPrice={unitPrice} quantity={safeQty} />
     </div>
   )
 }

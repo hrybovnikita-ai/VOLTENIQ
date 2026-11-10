@@ -148,3 +148,33 @@ test('duplicate registration is rejected and failed login never creates an accou
     assert.equal(after, before);
   });
 });
+
+test('email-link recovery changes the database password and revokes prior sessions', async () => {
+  const email = `recovery_${randomUUID()}@example.test`;
+  await withServer(async ({ request }) => {
+    const oldPassword = randomUUID();
+    const newPassword = randomUUID();
+    const original = await request('/api/auth/register', { method: 'POST', body: { email, password: oldPassword } });
+    const fetchOriginal = globalThis.fetch;
+    let consumed = false;
+    globalThis.fetch = async (url, options) => {
+      if (!(url instanceof URL) || url.hostname !== 'identitytoolkit.googleapis.com') return fetchOriginal(url, options);
+      const input = JSON.parse(options.body);
+      if (input.oobCode !== 'test-link' || input.email !== email || consumed) return Response.json({}, { status: 400 });
+      consumed = true;
+      return Response.json({ email });
+    };
+    const reset = code => request('/api/auth/reset-password', { method: 'POST', body: { email, password: newPassword, code } });
+    try {
+      assert.equal((await reset('wrong')).response.status, 400);
+      assert.equal((await reset('test-link')).response.status, 200);
+      assert.equal((await reset('test-link')).response.status, 400);
+      assert.equal((await request('/api/auth/me', { cookie: original.cookie })).response.status, 401);
+      for (const [password, status] of [[oldPassword, 401], [newPassword, 200]]) {
+        assert.equal((await request('/api/auth/login', { method: 'POST', body: { email, password } })).response.status, status);
+      }
+    } finally {
+      globalThis.fetch = fetchOriginal;
+    }
+  });
+});

@@ -28,10 +28,20 @@ export default function ProductViewer({
   const is360 = frames360.length >= 8
   const sources = is360 ? frames360 : gallery
 
+  const [point, setPoint] = useState(null)
+  const points = Object.entries(product.specs || {}).filter(([key]) => /camera|display|chip|processor|port|finish|design|wireless|charging/i.test(key))
+  if (!points.length) points.push(['Design', product.description])
   const [index, setIndex] = useState(0)
   const [zoom, setZoom] = useState(1)
   const [fullscreen, setFullscreen] = useState(false)
   const dragRef = useRef({ active: false, lastX: 0 })
+  const swiped = useRef(false)
+  const [origin, setOrigin] = useState('50% 50%')
+  function focusPoint(event) {
+    const rect = event.currentTarget.getBoundingClientRect()
+    setOrigin(event.detail === 0 && event.type === 'click' ? '50% 50%' :
+      ((event.clientX - rect.left) / rect.width * 100) + '% ' + ((event.clientY - rect.top) / rect.height * 100) + '%')
+  }
   const stageRef = useRef(null)
 
   useEffect(() => {
@@ -56,7 +66,8 @@ export default function ProductViewer({
   )
 
   const onPointerDown = (e) => {
-    if (zoom > 1 && !is360) return
+    swiped.current = false
+    if (zoom > 1) return
     dragRef.current = { active: true, lastX: e.clientX }
     e.currentTarget.setPointerCapture?.(e.pointerId)
   }
@@ -65,6 +76,7 @@ export default function ProductViewer({
     if (!dragRef.current.active) return
     const dx = e.clientX - dragRef.current.lastX
     if (Math.abs(dx) < 12) return
+    swiped.current = true
     dragRef.current.lastX = e.clientX
     if (is360) {
       stepFrame(dx > 0 ? -1 : 1)
@@ -108,23 +120,31 @@ export default function ProductViewer({
     >
       <div
         className="product-media relative aspect-square overflow-hidden bg-gradient-to-b from-silver/10 to-transparent dark:from-ink/40 select-none touch-pan-y"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
+      >
+        <button type="button" aria-label={zoom > 1 ? 'Restore photo size' : 'Magnify product photo'}
+          className={`block w-full h-full ${zoom > 1 ? 'cursor-zoom-out' : 'cursor-zoom-in'}`}
+          onClick={event => {
+            if (swiped.current && event.detail) return
+            focusPoint(event)
+            setZoom(zoom > 1 ? 1 : 2)
+          }}
+          onPointerDown={onPointerDown}
+        onPointerMove={event => { if (zoom > 1) focusPoint(event); else onPointerMove(event) }}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-        role="img"
-        aria-label={alt || product?.name || 'Product media'}
+
       >
         <img
           key={current}
           src={current}
           alt={alt || product?.name || ''}
           draggable={false}
-          className="h-full w-full object-contain p-5 sm:p-8 transition-transform duration-150"
-          style={{ transform: `scale(${zoom})` }}
+          className="viewer-photo h-full w-full object-contain p-5 sm:p-8 transition-transform duration-150"
+          style={{ transformOrigin: origin, transform: `scale(${zoom})` }}
         />
 
-        <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
+        </button>
+        <div className="pointer-events-none absolute top-3 left-3 flex flex-wrap gap-1.5">
           <span className="rounded-full bg-ink/80 text-snow text-[10px] font-bold uppercase tracking-wider px-2.5 py-1">
             {is360 ? '360° viewer' : 'Gallery'}
           </span>
@@ -172,11 +192,17 @@ export default function ProductViewer({
 
         {sources.length > 1 ? (
           <p className="absolute bottom-3 left-0 right-0 text-center text-[11px] text-muted pointer-events-none">
-            {is360 ? 'Drag or swipe to rotate' : 'Drag or swipe for more angles'}
+            {is360 ? 'Drag or swipe to rotate' : 'Drag or swipe for more photos'}
           </p>
         ) : null}
       </div>
 
+      <div className="px-4 pt-3 flex flex-wrap gap-2" aria-label="Product feature points">
+        {points.map(([label, detail]) => <button type="button" key={label} aria-expanded={point === label}
+          className="rounded-full border border-silver/30 px-3 py-1.5 text-sm hover:border-volt"
+          onClick={() => setPoint(point === label ? null : label)}><span className="text-volt">✦ </span>{label}</button>)}
+        {point && <p className="w-full text-sm py-2" role="status">{String(points.find(([label]) => label === point)?.[1] || '')}</p>}
+      </div>
       {sources.length > 1 ? (
         <div className="flex gap-2 overflow-x-auto p-3 scrollbar-thin">
           {sources.map((src, i) => (
@@ -196,7 +222,7 @@ export default function ProductViewer({
       ) : (
         <div className="flex items-center gap-2 px-4 py-3 text-xs text-muted">
           <Images className="w-3.5 h-3.5" />
-          Single angle available — 360° appears when multi-frame assets are provided.
+          Select the photo to magnify it.
         </div>
       )}
     </div>

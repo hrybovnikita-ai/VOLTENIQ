@@ -39,6 +39,12 @@ function accessory(name, slug, price, description, finishes, upgrades = {}) {
 }
 
 export const desktopProducts = [
+  listing({
+    name: 'Apple Mac Pro Tower', slug: 'apple-mac-pro-tower', category: 'Mac Pro',
+    description: 'A silver Apple desktop tower with a perforated front panel and integrated carrying handles.',
+    price: 69000, finishes: { Silver: 'mac-pro-tower.png' },
+    specs: { Finish: 'Silver', Form: 'Desktop tower' },
+  }),
   imac(2, 8, 1299, { '16GB': 0, '24GB': 200 }, ['256GB', '512GB', '1TB']),
   imac(4, 10, 1499, { '16GB': 0, '24GB': 200, '32GB': 400 }, ['256GB', '512GB', '1TB', '2TB']),
   listing({ ...studio, name: 'Mac Studio · M4 Max', slug: 'mac-studio-m4-max',

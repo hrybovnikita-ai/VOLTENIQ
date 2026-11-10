@@ -10,6 +10,19 @@ import Spinner from '../components/ui/Spinner'
 export default function FavoritesPage() {
   const { ids, products, setProducts } = useFavorites()
   const [loading, setLoading] = useState(false)
+  const [shareStatus, setShareStatus] = useState('')
+  const shareUrl = new URL('/wishlist', window.location.origin)
+  for (const product of products) shareUrl.searchParams.append('item', product.slug || product.id)
+
+  async function share() {
+    try {
+      await navigator.clipboard.writeText(shareUrl.href)
+      setShareStatus('Link copied')
+    } catch {
+      setShareStatus('Copy the link below')
+    }
+  }
+
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -53,6 +66,9 @@ export default function FavoritesPage() {
     <div className="container-shell page-section">
       <h1 className="page-title mb-2">Favorites</h1>
       <p className="text-muted mb-6 sm:mb-8 text-sm sm:text-base">{products.length} saved products</p>
+      <button type="button" className="mb-3 rounded-lg bg-volt px-4 py-2 font-semibold text-ink" onClick={share}>Share wishlist</button>
+      <p role="status" className="text-sm">{shareStatus}</p>
+      {shareStatus && <input aria-label="Read-only wishlist link" className="my-3 w-full rounded border p-2 text-ink bg-white" readOnly value={shareUrl.href} onFocus={event => event.target.select()} />}
       <div className="product-grid">
         {products.map((product) => (
           <ProductCard key={product.id} product={product} />

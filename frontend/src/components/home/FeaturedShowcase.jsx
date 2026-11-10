@@ -89,14 +89,17 @@ export default function FeaturedShowcase({ products = [] }) {
       moved: false,
     }
     setDragging(true)
-    event.currentTarget.setPointerCapture?.(event.pointerId)
+    // Keep taps targeted at the product link while tracking drags outside it.
+    const target = event.target.closest('.showcase-card') || event.currentTarget
+    target.setPointerCapture(event.pointerId)
   }
 
   const onPointerMove = (event) => {
     const drag = dragRef.current
     if (!drag.active) return
     const delta = event.clientX - drag.startX
-    if (Math.abs(delta) > 6) drag.moved = true
+    if (!drag.moved && Math.abs(delta) <= 6) return
+    drag.moved = true
     setOffset(drag.origin - delta)
   }
 
@@ -105,7 +108,7 @@ export default function FeaturedShowcase({ products = [] }) {
     if (!drag.active) return
     drag.active = false
     setDragging(false)
-    event.currentTarget.releasePointerCapture?.(event.pointerId)
+    // The browser releases pointer capture after pointerup or pointercancel.
 
     const track = trackRef.current
     const loopWidth = (track?.scrollWidth || 0) / 2
@@ -118,15 +121,7 @@ export default function FeaturedShowcase({ products = [] }) {
       })
     }
 
-    if (drag.moved) {
-      const node = event.currentTarget
-      const blockClick = (clickEvent) => {
-        clickEvent.preventDefault()
-        clickEvent.stopPropagation()
-        node.removeEventListener('click', blockClick, true)
-      }
-      node.addEventListener('click', blockClick, true)
-    }
+
   }
 
   if (!items.length) return null
@@ -170,6 +165,12 @@ export default function FeaturedShowcase({ products = [] }) {
 
       <div
         className={`showcase-viewport${dragging ? ' is-dragging' : ''}`}
+        onClickCapture={event => {
+          if (event.detail && dragRef.current.moved) {
+            event.preventDefault()
+            event.stopPropagation()
+          }
+        }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}

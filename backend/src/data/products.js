@@ -805,6 +805,7 @@ const otherProducts = [
 export const demoProducts = [...iphoneProducts, ...otherProducts, ...desktopProducts];
 
 export const categories = [
+  { id: 'Mac Pro', name: 'Mac Pro', description: 'Apple desktop towers.', icon: 'Monitor' },
   { id: 'iMac', name: 'iMac', description: 'All-in-one Retina desktops.', icon: 'Monitor' },
   { id: 'Mac Studio', name: 'Mac Studio', description: 'Apple silicon workstations.', icon: 'Monitor' },
   { id: 'iPhone', name: 'iPhone', description: 'Phones for the VOLTENIQ demo store.', icon: 'Smartphone' },

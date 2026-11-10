@@ -128,6 +128,7 @@ export default function ProductCard({ product }) {
           : null}
       </div>
 
+      <Link to={detailTo + '#product-expert'} className="text-sm font-semibold hover:underline">Ask the product expert</Link>
       <div className="product-card__actions">
         <Button
           className="w-full"

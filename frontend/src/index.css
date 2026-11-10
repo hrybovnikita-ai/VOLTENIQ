@@ -1014,3 +1014,23 @@ body.nav-open {
   .configuration-price { animation: price-arrive 200ms ease-out; }
   @keyframes price-arrive { from { opacity: .55; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
 }
+
+:root:not(.dark) .auth-page {
+  color: var(--color-ink);
+  background: radial-gradient(ellipse at top, #ffe6cb, transparent 62%), #f7f7f6;
+}
+:root:not(.dark) .auth-card {
+  background: rgba(255,255,255,.94) !important;
+  box-shadow: 0 18px 55px rgba(48,34,20,.13);
+}
+:root:not(.dark) .auth-page :is(h1, label, .font-display, .auth-input, .auth-google-btn) { color: var(--color-ink); }
+:root:not(.dark) .auth-page :is(.auth-input, .auth-google-btn) { background: #fff; border-color: #adadad; }
+:root:not(.dark) .auth-page :is(.auth-card > p, .text-silver\/70, .auth-input::placeholder) { color: #555; }
+:root:not(.dark) .auth-input::placeholder { color: #666; }
+:root:not(.dark) .auth-page .text-volt { color: #9b4700; }
+.auth-page input[type=password], .auth-page input[autocomplete*=password] { padding-right: 3rem; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .viewer-photo { animation: viewer-photo-in 180ms ease-out; }
+  @keyframes viewer-photo-in { from { opacity: .55; } to { opacity: 1; } }
+}

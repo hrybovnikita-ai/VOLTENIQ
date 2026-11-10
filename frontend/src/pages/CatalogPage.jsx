@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import PhotoSearch from '../components/catalog/PhotoSearch'
 import { Search } from 'lucide-react'
 import { api } from '../api/client'
 import { useApi } from '../hooks/useApi'
@@ -62,6 +63,7 @@ export default function CatalogPage() {
     <div className="container-shell page-section">
       <div className="mb-6 sm:mb-8 min-w-0">
         <h1 className="page-title mb-2">Catalog</h1>
+        <PhotoSearch />
         <p className="section-copy">
           Explore the full demo lineup. All prices are <span className="text-volt font-semibold">DEMO</span> USD
           prices — no real payments.

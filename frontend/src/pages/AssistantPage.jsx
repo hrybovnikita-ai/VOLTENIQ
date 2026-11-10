@@ -203,7 +203,8 @@ export default function AssistantPage() {
 
     try {
       const conversationId = await ensureConversation()
-      const reply = localReply(content)
+      const { data } = await api.askAssistant(content)
+      const reply = data.reply || localReply(content)
       const assistantMsg = { id: crypto.randomUUID(), role: 'assistant', content: reply }
 
       timerRef.current = setTimeout(async () => {
