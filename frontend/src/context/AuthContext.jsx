@@ -64,13 +64,23 @@ function ClerkAuthProvider({ children }) {
   }
 
   async function register({ email, password }) {
-    const nextUser = saveSession(await api.register({ email, password }))
-    return { user: nextUser, needsVerification: false }
+    const response = await api.register({ email, password })
+    if (response?.data?.needsVerification) {
+      return { user: null, needsVerification: true, email: response.data.email || email }
+    }
+    if (response?.data?.user) {
+      return { user: saveSession(response), needsVerification: false }
+    }
+    return { user: null, needsVerification: true, email }
   }
 
-  async function verifyEmailCode() {
-    throw new Error('Email verification is handled by the store account flow')
-  }
+  const verifyEmailCode = useCallback(async ({ email, token }) => (
+    saveSession(await api.verifyEmail({ email, token }))
+  ), [saveSession])
+
+  const resendVerification = useCallback(async (email) => (
+    api.resendVerification({ email })
+  ), [])
 
   async function loginWithGoogle() {
     if (clerk.isSignedIn) return syncClerkSession()
@@ -128,6 +138,7 @@ function ClerkAuthProvider({ children }) {
         login,
         register,
         verifyEmailCode,
+        resendVerification,
         loginWithGoogle,
         logout,
         updateProfile: updateProfileInfo,
@@ -186,13 +197,15 @@ function LegacyAuthProvider({ children }) {
         isAdmin: user?.role === 'ADMIN',
         clerkEnabled: false,
         login: async (email, password) => saveSession(await api.login({ email, password })),
-        register: async ({ email, password }) => ({
-          user: saveSession(await api.register({ email, password })),
-          needsVerification: false,
-        }),
-        verifyEmailCode: async () => {
-          throw new Error('Email verification is unavailable')
+        register: async ({ email, password }) => {
+          const response = await api.register({ email, password })
+          if (response?.data?.needsVerification) {
+            return { user: null, needsVerification: true, email: response.data.email || email }
+          }
+          return { user: saveSession(response), needsVerification: false }
         },
+        verifyEmailCode: async ({ email, token }) => saveSession(await api.verifyEmail({ email, token })),
+        resendVerification: async (email) => api.resendVerification({ email }),
         loginWithGoogle: async () => {
           throw new Error('Google sign-in requires Clerk. Set VITE_CLERK_PUBLISHABLE_KEY and redeploy.')
         },

@@ -27,6 +27,8 @@ http.interceptors.response.use(
     apiError.status = error.response.status
     apiError.provider = payload?.provider
     apiError.errors = payload?.errors
+    apiError.code = payload?.code
+    apiError.data = payload?.data
     return Promise.reject(apiError)
   }
 )
@@ -57,7 +59,10 @@ export const api = {
   compareProducts: (ids) =>
     request('get', '/products/compare', { params: { ids: ids.join(',') } }),
   login: (body) => request('post', '/auth/login', { data: body }),
+  forgotPassword: (body) => request('post', '/auth/forgot-password', { data: body }),
   resetPassword: (body) => request('post', '/auth/reset-password', { data: body }),
+  verifyEmail: (body) => request('post', '/auth/verify-email', { data: body }),
+  resendVerification: (body) => request('post', '/auth/resend-verification', { data: body }),
   logout: () => request('post', '/auth/logout'),
   register: (body) => request('post', '/auth/register', { data: body }),
   firebaseSession: (body) => request('post', '/auth/firebase', { data: body }),
@@ -65,6 +70,9 @@ export const api = {
   authProviders: () => request('get', '/auth/providers'),
   session: () => request('get', '/auth/session'),
   me: () => request('get', '/auth/me'),
+  listSessions: () => request('get', '/auth/sessions'),
+  revokeSession: (id) => request('delete', `/auth/sessions/${id}`),
+  revokeOtherSessions: (body = {}) => request('post', '/auth/sessions/revoke-all', { data: body }),
   updateProfile: (body) => request('put', '/auth/me', { data: body }),
   getOrders: () => request('get', '/orders'),
   getOrder: (id) => request('get', `/orders/${id}`),

@@ -20,6 +20,8 @@ export default function ProfilePage() {
   const [currentPassword, setCurrentPassword] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [sessions, setSessions] = useState([])
+  const [sessionsBusy, setSessionsBusy] = useState(false)
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const { hash } = useLocation()
@@ -46,14 +48,53 @@ export default function ProfilePage() {
       api.getOrders().catch(() => ({ data: { orders: [] } })),
       api.getPriceAlerts().catch(() => ({ data: { alerts: [] } })),
       api.getAlertNotifications().catch(() => ({ data: { notifications: [] } })),
+      api.listSessions().catch(() => ({ data: { sessions: [] } })),
     ])
-      .then(([ordersRes, alertsRes, notesRes]) => {
+      .then(([ordersRes, alertsRes, notesRes, sessionsRes]) => {
         setOrders(ordersRes.data.orders || [])
         setAlerts(alertsRes.data.alerts || [])
         setNotifications(notesRes.data.notifications || [])
+        setSessions(sessionsRes.data.sessions || [])
       })
       .finally(() => setLoading(false))
   }, [isAuthenticated])
+
+  const refreshSessions = async () => {
+    const res = await api.listSessions()
+    setSessions(res.data.sessions || [])
+  }
+
+  const revokeSession = async (id) => {
+    setSessionsBusy(true)
+    setError('')
+    try {
+      await api.revokeSession(id)
+      if (sessions.find((s) => s.id === id)?.current) {
+        await logout()
+        navigate('/login', { replace: true })
+        return
+      }
+      await refreshSessions()
+    } catch (err) {
+      setError(err.message || 'Could not revoke session')
+    } finally {
+      setSessionsBusy(false)
+    }
+  }
+
+  const revokeOtherSessions = async () => {
+    setSessionsBusy(true)
+    setError('')
+    try {
+      await api.revokeOtherSessions({ keepCurrent: true })
+      await refreshSessions()
+      setMessage('Signed out of other devices')
+    } catch (err) {
+      setError(err.message || 'Could not revoke other sessions')
+    } finally {
+      setSessionsBusy(false)
+    }
+  }
 
   const removeAlert = async (id) => {
     try {
@@ -184,6 +225,41 @@ export default function ProfilePage() {
           <Button type="submit" className="w-full">
             Save changes
           </Button>
+
+          <div id="security" style={{ scrollMarginTop: 80 }} className="pt-4 border-t border-silver/20 space-y-3">
+            <h2 className="font-display text-lg font-bold">Signed-in devices</h2>
+            <p className="text-sm text-muted">
+              Revoke a session to sign out that browser. Idle sessions expire after 14 days.
+            </p>
+            <ul className="space-y-2">
+              {sessions.map((session) => (
+                <li key={session.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <div className="min-w-0">
+                    <p className="font-medium truncate">
+                      {session.current ? 'This device' : (session.userAgent || 'Unknown device')}
+                    </p>
+                    <p className="text-xs text-muted">
+                      Last seen {formatDate(session.lastSeenAt)}
+                      {session.ip ? ` · ${session.ip}` : ''}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={sessionsBusy}
+                    onClick={() => revokeSession(session.id)}
+                  >
+                    {session.current ? 'Sign out' : 'Revoke'}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+            {sessions.length > 1 ? (
+              <Button type="button" variant="soft" disabled={sessionsBusy} onClick={revokeOtherSessions}>
+                Sign out other devices
+              </Button>
+            ) : null}
+          </div>
         </form>
 
         <div className="min-w-0 space-y-10">

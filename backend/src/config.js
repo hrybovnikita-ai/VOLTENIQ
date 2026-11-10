@@ -55,6 +55,14 @@ const isVercelRuntime = Boolean(
   && (process.env.VERCEL_REGION || process.env.VERCEL_DEPLOYMENT_ID)
 );
 
+function resolveAppOrigin() {
+  const configured = normalizeOrigin(process.env.APP_ORIGIN);
+  if (configured) return configured;
+  if (configuredOrigins[0]) return configuredOrigins[0];
+  if (process.env.NODE_ENV === 'production' && vercelOrigins[0]) return vercelOrigins[0];
+  return 'http://localhost:5173';
+}
+
 export const config = {
   port: Number(process.env.PORT) || 5004,
   nodeEnv: process.env.NODE_ENV || 'development',
@@ -63,6 +71,11 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || 'volteniq-demo-secret-change-me',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   corsOrigin,
+  appOrigin: resolveAppOrigin(),
+  mailFrom: process.env.MAIL_FROM || '',
+  resendApiKey: process.env.RESEND_API_KEY || '',
+  smtpUrl: process.env.SMTP_URL || '',
+  authTestReturnToken: String(process.env.AUTH_TEST_RETURN_TOKEN || '').toLowerCase() === '1',
   databaseUrl: process.env.DATABASE_URL,
   databaseUrlUnpooled: process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL,
   neonBranch: process.env.NEON_BRANCH || null,

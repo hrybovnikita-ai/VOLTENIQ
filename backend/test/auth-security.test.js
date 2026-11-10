@@ -1,15 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import app from '../src/app.js';
-import { prisma } from '../src/db/prisma.js';
-import { SESSION_COOKIE_NAME } from '../src/services/sessionService.js';
+
+process.env.AUTH_TEST_RETURN_TOKEN = '1';
+
+const { default: app } = await import('../src/app.js');
+const { prisma } = await import('../src/db/prisma.js');
+const { SESSION_COOKIE_NAME } = await import('../src/services/sessionService.js');
 
 function cookieHeader(setCookie = []) {
   return setCookie
     .map((value) => String(value).split(';')[0])
     .filter(Boolean)
     .join('; ');
+}
+
+function sessionCookie(setCookie = []) {
+  return setCookie.find((value) => String(value).startsWith(`${SESSION_COOKIE_NAME}=`));
 }
 
 async function withServer(run) {
@@ -42,17 +49,29 @@ async function withServer(run) {
   }
 }
 
+async function registerAndVerify(request, email, password) {
+  const registered = await request('/api/auth/register', {
+    method: 'POST',
+    body: { email, password },
+  });
+  assert.equal(registered.response.status, 201);
+  const token = registered.payload.data.token;
+  assert.ok(token);
+  const verified = await request('/api/auth/verify-email', {
+    method: 'POST',
+    body: { email, token },
+  });
+  assert.equal(verified.response.status, 200);
+  return verified;
+}
+
 test('password change requires current password and revokes other sessions', async () => {
   const email = `sec_${randomUUID()}@example.test`;
   const password = `OldPass_${randomUUID().slice(0, 8)}`;
   const nextPassword = `NewPass_${randomUUID().slice(0, 8)}`;
 
   await withServer(async ({ request }) => {
-    const registered = await request('/api/auth/register', {
-      method: 'POST',
-      body: { email, password },
-    });
-    assert.equal(registered.response.status, 201);
+    const registered = await registerAndVerify(request, email, password);
     const cookieA = registered.cookie;
 
     const secondLogin = await request('/api/auth/login', {
@@ -91,20 +110,24 @@ test('password change requires current password and revokes other sessions', asy
     const fresh = await request('/api/auth/me', { cookie: changed.cookie });
     assert.equal(fresh.response.status, 200);
     assert.equal(fresh.payload.data.user.email, email);
+
+    const revokeOthers = await request('/api/auth/sessions/revoke-all', {
+      method: 'POST',
+      cookie: changed.cookie,
+      body: { keepCurrent: true },
+    });
+    assert.equal(revokeOthers.response.status, 200);
   });
 
   await prisma.user.deleteMany({ where: { email } }).catch(() => {});
 });
-
-function sessionCookie(setCookie = []) {
-  return setCookie.find((value) => String(value).startsWith(`${SESSION_COOKIE_NAME}=`));
-}
 
 test('firebase bridge is disabled when Clerk is enabled', async () => {
   await withServer(async ({ request }) => {
     const providers = await request('/api/auth/providers');
     assert.equal(providers.payload.data.clerk, true);
     assert.equal(providers.payload.data.firebase, false);
+    assert.equal(providers.payload.data.mailConfigured, true);
 
     const firebase = await request('/api/auth/firebase', {
       method: 'POST',
@@ -130,6 +153,7 @@ test('register rejects short passwords and duplicate emails', async () => {
       body: { email, password },
     });
     assert.equal(first.response.status, 201);
+    assert.equal(first.payload.data.needsVerification, true);
 
     const dup = await request('/api/auth/register', {
       method: 'POST',
@@ -150,11 +174,8 @@ test('admin endpoints reject unauthenticated and non-admin callers', async () =>
     const anon = await request('/api/admin/users');
     assert.equal(anon.response.status, 401);
 
-    const registered = await request('/api/auth/register', {
-      method: 'POST',
-      body: { email, password },
-    });
-    assert.equal(registered.response.status, 201);
+    const registered = await registerAndVerify(request, email, password);
+    assert.equal(registered.response.status, 200);
 
     const forbidden = await request('/api/admin/users', { cookie: registered.cookie });
     assert.equal(forbidden.response.status, 403);

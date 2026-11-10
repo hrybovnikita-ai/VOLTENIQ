@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, Navigate, useLocation } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AuthLayout from '../components/auth/AuthLayout'
 import AuthPasswordField from '../components/auth/AuthPasswordField'
@@ -12,6 +12,7 @@ const inputClass = 'auth-input'
 export default function SignupPage() {
   const { register, loginWithGoogle, isAuthenticated, clerkEnabled } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
   const [form, setForm] = useState({
     email: '',
     password: '',
@@ -38,11 +39,15 @@ export default function SignupPage() {
     }
     setLoading(true)
     try {
-      await register({
+      const result = await register({
         email: form.email.trim(),
         password: form.password,
         confirmPassword: form.confirmPassword,
       })
+      if (result?.needsVerification) {
+        navigate(`/verify-email?email=${encodeURIComponent(result.email || form.email.trim())}`, { replace: true })
+        return
+      }
     } catch (err) {
       setError(err.message || 'Sign up failed')
     } finally {

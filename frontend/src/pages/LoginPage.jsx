@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, Navigate, useLocation } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AuthLayout from '../components/auth/AuthLayout'
 import AuthPasswordField from '../components/auth/AuthPasswordField'
@@ -12,6 +12,7 @@ const inputClass = 'auth-input'
 export default function LoginPage() {
   const { login, loginWithGoogle, isAuthenticated, clerkEnabled } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState(location.state?.oauthError || '')
   const [loading, setLoading] = useState(false)
@@ -28,6 +29,12 @@ export default function LoginPage() {
     try {
       await login(form.email.trim(), form.password)
     } catch (err) {
+      if (err.code === 'email_unverified') {
+        navigate(`/verify-email?email=${encodeURIComponent(err.data?.email || form.email.trim())}`, {
+          replace: true,
+        })
+        return
+      }
       setError(err.message || 'Sign in failed')
     } finally {
       setLoading(false)
