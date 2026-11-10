@@ -20,20 +20,37 @@ const app = express();
 // Required behind Vercel / reverse proxies so Secure cookies and IPs work.
 app.set('trust proxy', 1);
 
-// Preserve the original Clerk request path and stream OAuth bodies before Express parses JSON.
-if (process.env.VERCEL_ENV === 'production') {
-  const proxy = clerkMiddleware({
-    publishableKey: process.env.VITE_CLERK_PUBLISHABLE_KEY,
+/**
+ * Official Clerk Frontend API proxy must run before body parsers so OAuth
+ * callbacks and clerk-js assets stream with the original request body.
+ * Scoped to /__clerk so VOLTENIQ cookie sessions remain independent.
+ */
+if (config.clerkSecretKey && config.clerkPublishableKey) {
+  const clerkProxy = clerkMiddleware({
+    publishableKey: config.clerkPublishableKey,
     secretKey: config.clerkSecretKey,
-    frontendApiProxy: { enabled: true, path: '/__clerk' },
+    frontendApiProxy: {
+      enabled: true,
+      path: '/__clerk',
+    },
   });
-  app.use('/__clerk', (req, res, next) => {
-    // The store session belongs to Express; Clerk only needs its own cookies.
-    if (req.headers.cookie) {
-      req.headers.cookie = req.headers.cookie.split(';').map(part => part.trim())
-        .filter(part => !/^(?:__Host-)?volteniq_session=/.test(part)).join('; ');
+
+  app.use((req, res, next) => {
+    const path = String(req.originalUrl || req.url || '').split('?')[0];
+    if (path !== '/__clerk' && !path.startsWith('/__clerk/')) {
+      return next();
     }
-    return proxy(req, res, next);
+
+    // Keep the store session cookie out of Clerk FAPI forwarding.
+    if (req.headers.cookie) {
+      req.headers.cookie = req.headers.cookie
+        .split(';')
+        .map((part) => part.trim())
+        .filter((part) => part && !/^(?:__Host-)?volteniq_session=/.test(part))
+        .join('; ');
+    }
+
+    return clerkProxy(req, res, next);
   });
 }
 
@@ -59,6 +76,7 @@ app.get('/api/health', (req, res) => {
     status: 'online',
     service: 'VOLTENIQ API',
     demoMode: config.demoMode,
+    clerkProxy: Boolean(config.clerkSecretKey && config.clerkPublishableKey),
     timestamp: new Date().toISOString(),
   });
 });
