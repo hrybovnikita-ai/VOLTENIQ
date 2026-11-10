@@ -1,16 +1,19 @@
+import { resetPasswordWithEmailLink } from '../services/passwordRecovery.js';
 import { Router } from 'express';
-import { startSession, endSession } from '../services/sessionService.js';
+import { startSession, endSession, sessionUser } from '../services/sessionService.js';
 import { body } from 'express-validator';
 import { config } from '../config.js';
 import { validate } from '../middleware/validate.js';
 import { authenticate } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { verifyFirebaseIdToken } from '../utils/firebaseAuth.js';
+import { verifyClerkSessionToken } from '../utils/clerkAuth.js';
 import {
   createUser,
   findUserByEmail,
   verifyPassword,
   findOrCreateFirebaseUser,
+  findOrCreateClerkUser,
   getUserById,
   updateUser,
 } from '../services/userService.js';
@@ -27,6 +30,17 @@ function nameFromEmail(email) {
 }
 
 const emailField = () => body('email').isString().trim().isEmail().withMessage('Enter a valid email address');
+
+router.post('/reset-password', [
+  emailField(),
+  body('code').isString().isLength({ min: 1, max: 2048 }),
+  body('password').isString().isLength({ min: 6 }).isByteLength({ max: 72 })
+    .withMessage('Use at least 6 characters and at most 72 bytes for your password'),
+], validate, asyncHandler(async (req, res) => {
+  const { email, code, password } = req.body;
+  await resetPasswordWithEmailLink(email, code, password);
+  res.json({ success: true });
+}));
 
 router.post('/register', [
   emailField(),
@@ -62,10 +76,31 @@ router.get(
     res.json({
       success: true,
       data: {
-        firebase: Boolean(config.firebaseProjectId),
-        google: Boolean(config.firebaseProjectId),
+        clerk: config.clerkEnabled,
+        firebase: Boolean(config.firebaseProjectId) && !config.clerkEnabled,
+        google: config.clerkEnabled || Boolean(config.firebaseProjectId),
         projectId: config.firebaseProjectId || null,
       },
+    });
+  })
+);
+
+router.post(
+  '/clerk',
+  [body('token').notEmpty().withMessage('Clerk session token required')],
+  validate,
+  asyncHandler(async (req, res) => {
+    const claims = await verifyClerkSessionToken(req.body.token);
+    const user = await findOrCreateClerkUser({
+      clerkId: claims.clerkId,
+      email: claims.email,
+      name: claims.name || nameFromEmail(claims.email),
+    });
+    await startSession(req, res, user.id);
+    res.json({
+      success: true,
+      message: 'Signed in with Clerk',
+      data: { user },
     });
   })
 );
@@ -90,6 +125,12 @@ router.post(
     });
   })
 );
+
+router.get('/session', asyncHandler(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const user = await sessionUser(req);
+  res.json({ success: true, data: { user } });
+}));
 
 router.post('/logout', asyncHandler(async (req, res) => {
   await endSession(req, res);

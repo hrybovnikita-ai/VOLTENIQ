@@ -44,6 +44,9 @@ function cleanParams(params = {}) {
 }
 
 export const api = {
+  searchPhoto: (photo) => request('post', '/assistant', { data: { photo } }),
+  askProduct: (productId, selections, message) => request('post', '/assistant', { data: { productId, selections, message } }),
+  askAssistant: (message) => request('post', '/assistant', { data: { message } }),
   health: () => request('get', '/health'),
   getProducts: (params = {}) => request('get', '/products', { params: cleanParams(params) }),
   getFeatured: () => request('get', '/products/featured'),
@@ -54,10 +57,13 @@ export const api = {
   compareProducts: (ids) =>
     request('get', '/products/compare', { params: { ids: ids.join(',') } }),
   login: (body) => request('post', '/auth/login', { data: body }),
+  resetPassword: (body) => request('post', '/auth/reset-password', { data: body }),
   logout: () => request('post', '/auth/logout'),
   register: (body) => request('post', '/auth/register', { data: body }),
   firebaseSession: (body) => request('post', '/auth/firebase', { data: body }),
+  clerkSession: (body) => request('post', '/auth/clerk', { data: body }),
   authProviders: () => request('get', '/auth/providers'),
+  session: () => request('get', '/auth/session'),
   me: () => request('get', '/auth/me'),
   updateProfile: (body) => request('put', '/auth/me', { data: body }),
   getOrders: () => request('get', '/orders'),

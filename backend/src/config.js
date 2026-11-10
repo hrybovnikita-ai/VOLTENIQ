@@ -60,4 +60,6 @@ export const config = {
   databaseUrlUnpooled: process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL,
   neonBranch: process.env.NEON_BRANCH || null,
   firebaseProjectId: process.env.FIREBASE_PROJECT_ID || 'volteniq',
+  clerkSecretKey: process.env.CLERK_SECRET_KEY || '',
+  clerkEnabled: Boolean(process.env.CLERK_SECRET_KEY),
 };

@@ -15,10 +15,9 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const from = location.state?.from
   if (isAuthenticated) {
-    const target = typeof from === 'string' && /^\/(?![/\\])/.test(from) ? from : '/'
-    return <Navigate to={target} replace />
+    const dest = location.state?.from || '/'
+    return <Navigate to={dest} replace />
   }
 
   const onSubmit = async (e) => {
@@ -77,6 +76,8 @@ export default function LoginPage() {
           placeholder="Your password"
         />
 
+        <Link className="block text-sm text-volt font-semibold" to="/forgot-password">Forgot password?</Link>
+
         {error ? <p role="alert" className="text-sm text-red-400">{error}</p> : null}
 
         <Button type="submit" className="w-full rounded-[16px]" size="lg" disabled={loading}>
@@ -97,9 +98,8 @@ export default function LoginPage() {
           setError('')
           try {
             await loginWithGoogle()
-                } catch (err) {
+          } catch (err) {
             setError(err.message || 'Google sign-in failed')
-          } finally {
             setLoading(false)
           }
         }}

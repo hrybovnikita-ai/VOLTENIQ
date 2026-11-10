@@ -20,6 +20,10 @@ export async function findUserByFirebaseUid(firebaseUid) {
   return prisma.user.findFirst({ where: { firebaseUid } });
 }
 
+export async function findUserByClerkId(clerkId) {
+  return prisma.user.findFirst({ where: { clerkId } });
+}
+
 export async function getUserById(id) {
   const user = await prisma.user.findUnique({ where: { id } });
   return sanitize(user);
@@ -31,18 +35,18 @@ export async function createUser({
   password,
   googleId = null,
   firebaseUid = null,
+  clerkId = null,
 }) {
   const hashed = password
     ? await bcrypt.hash(password, 10)
     : await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
 
-
   try {
     // Omit role entirely so PostgreSQL supplies USER. The API login cannot grant roles.
     const [user] = await prisma.$queryRaw`
-      INSERT INTO public."User" (id, name, email, password, "googleId", "firebaseUid", "updatedAt")
-      VALUES (${crypto.randomUUID()}, ${name}, ${email.toLowerCase()}, ${hashed}, ${googleId}, ${firebaseUid}, CURRENT_TIMESTAMP)
-      RETURNING id, name, email, "googleId", "firebaseUid", role::text AS role, "createdAt", "updatedAt"
+      INSERT INTO public."User" (id, name, email, password, "googleId", "firebaseUid", "clerkId", "updatedAt")
+      VALUES (${crypto.randomUUID()}, ${name}, ${email.toLowerCase()}, ${hashed}, ${googleId}, ${firebaseUid}, ${clerkId}, CURRENT_TIMESTAMP)
+      RETURNING id, name, email, "googleId", "firebaseUid", "clerkId", role::text AS role, "createdAt", "updatedAt"
     `;
     return sanitize(user);
   } catch (error) {
@@ -53,6 +57,60 @@ export async function createUser({
     }
     throw error;
   }
+}
+
+/**
+ * Link a verified Clerk identity to an existing Prisma user by email, or create one.
+ * Never deletes users and never creates a second row for the same email.
+ */
+export async function findOrCreateClerkUser({ clerkId, email, name }) {
+  if (!clerkId || !email) {
+    const err = new Error('Clerk account email is required');
+    err.status = 400;
+    throw err;
+  }
+
+  const existingByClerk = await findUserByClerkId(clerkId);
+  if (existingByClerk) {
+    if (existingByClerk.email.toLowerCase() !== email.toLowerCase()) {
+      const err = new Error('This Clerk account is already linked to a different email');
+      err.status = 409;
+      throw err;
+    }
+    if (name && name !== existingByClerk.name) {
+      const updated = await prisma.user.update({
+        where: { id: existingByClerk.id },
+        data: { name },
+      });
+      return sanitize(updated);
+    }
+    return sanitize(existingByClerk);
+  }
+
+  const existingByEmail = await findUserByEmail(email);
+  if (existingByEmail) {
+    if (existingByEmail.clerkId && existingByEmail.clerkId !== clerkId) {
+      const err = new Error('This email is already linked to another Clerk account');
+      err.status = 409;
+      throw err;
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: existingByEmail.id },
+      data: {
+        clerkId,
+        ...(name ? { name } : {}),
+      },
+    });
+    return sanitize(updated);
+  }
+
+  return createUser({
+    name: name || email.split('@')[0],
+    email,
+    password: null,
+    clerkId,
+  });
 }
 
 export async function findOrCreateFirebaseUser({
@@ -73,15 +131,22 @@ export async function findOrCreateFirebaseUser({
     user = await findUserByGoogleId(firebaseUid);
   }
   if (!user) {
-    if (await findUserByEmail(email)) {
-      const err = new Error('This email already has an account. Use its original sign-in method.');
-      err.status = 409;
-      throw err;
+    const byEmail = await findUserByEmail(email);
+    if (byEmail) {
+      // Link Firebase/Google to the existing store account instead of duplicating.
+      const updated = await prisma.user.update({
+        where: { id: byEmail.id },
+        data: {
+          firebaseUid,
+          ...(isGoogle ? { googleId: firebaseUid } : {}),
+          ...(name ? { name } : {}),
+        },
+      });
+      return sanitize(updated);
     }
   }
 
   if (user) {
-
     const updated = await prisma.user.update({
       where: { id: user.id },
       data: {
@@ -109,7 +174,6 @@ export async function verifyPassword(user, password) {
 }
 
 export async function updateUser(id, data) {
-
   const update = {};
   if (data.name) update.name = data.name;
   if (data.password) update.password = await bcrypt.hash(data.password, 10);

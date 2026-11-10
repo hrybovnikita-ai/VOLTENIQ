@@ -13,6 +13,7 @@
     "test": "node --test src/utils/demoPayment.test.js src/utils/assistantBrain.test.js src/utils/chatHistory.test.js"
   },
   "dependencies": {
+    "@clerk/react": "^6.18.6",
     "axios": "^1.21.0",
     "firebase": "^11.10.0",
     "lucide-react": "^0.575.0",
