@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "@clerk/backend": "^3.27.0",
+    "@clerk/express": "^2.1.88",
     "@prisma/client": "^6.19.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",

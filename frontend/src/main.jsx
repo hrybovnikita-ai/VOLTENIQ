@@ -8,6 +8,9 @@ import { CLERK_PUBLISHABLE_KEY, isClerkEnabled } from './lib/clerk'
 const tree = isClerkEnabled ? (
   <ClerkProvider
     publishableKey={CLERK_PUBLISHABLE_KEY}
+    proxyUrl={window.location.origin === 'https://volteniq.vercel.app'
+      ? 'https://volteniq.vercel.app/__clerk'
+      : undefined}
     signInUrl="/login"
     signUpUrl="/signup"
     signInFallbackRedirectUrl="/"

@@ -24,6 +24,8 @@
     }
   },
   "rewrites": [
+    { "source": "/__clerk", "destination": { "service": "backend" } },
+    { "source": "/__clerk/(.*)", "destination": { "service": "backend" } },
     { "source": "/api/(.*)", "destination": { "service": "backend" } },
     { "source": "/(.*)", "destination": { "service": "frontend" } }
   ]

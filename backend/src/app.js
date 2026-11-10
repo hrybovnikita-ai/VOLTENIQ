@@ -1,4 +1,5 @@
 import express from 'express';
+import { clerkMiddleware } from '@clerk/express';
 import cors from 'cors';
 import { config } from './config.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
@@ -18,6 +19,23 @@ const app = express();
 
 // Required behind Vercel / reverse proxies so Secure cookies and IPs work.
 app.set('trust proxy', 1);
+
+// Preserve the original Clerk request path and stream OAuth bodies before Express parses JSON.
+if (process.env.VERCEL_ENV === 'production') {
+  const proxy = clerkMiddleware({
+    publishableKey: process.env.VITE_CLERK_PUBLISHABLE_KEY,
+    secretKey: config.clerkSecretKey,
+    frontendApiProxy: { enabled: true, path: '/__clerk' },
+  });
+  app.use('/__clerk', (req, res, next) => {
+    // The store session belongs to Express; Clerk only needs its own cookies.
+    if (req.headers.cookie) {
+      req.headers.cookie = req.headers.cookie.split(';').map(part => part.trim())
+        .filter(part => !/^(?:__Host-)?volteniq_session=/.test(part)).join('; ');
+    }
+    return proxy(req, res, next);
+  });
+}
 
 app.use(
   cors({
