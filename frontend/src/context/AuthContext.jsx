@@ -74,7 +74,12 @@ function ClerkAuthProvider({ children }) {
 
   async function loginWithGoogle(mode = 'signIn') {
     if (clerk.isSignedIn) return syncClerkSession()
-    if (!clerkSdk?.client) {
+    // A first click can arrive before the external Clerk script has initialized.
+    const deadline = Date.now() + 8000
+    while (!clerkSdk.client && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+    if (!clerkSdk.client) {
       throw new Error('Google sign-in could not load. Retry in Safari or Chrome, or use email and password.')
     }
     try {
