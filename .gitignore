@@ -5,6 +5,7 @@ backend/.env.local
 .env
 .env.local
 .env*.local
+.env.vercel*
 node_modules/
 frontend/dist/
 backend/dist/
