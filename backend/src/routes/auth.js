@@ -97,6 +97,7 @@ router.post(
       name: claims.name || nameFromEmail(claims.email),
       emailVerified: claims.emailVerified,
       googleId: claims.googleId,
+      avatarUrl: claims.avatarUrl,
     });
     await startSession(req, res, user.id);
     res.json({
@@ -154,12 +155,14 @@ router.put(
   [
     body('name').optional().trim().isLength({ min: 2 }).withMessage('Name must be at least 2 characters'),
     body('password').optional().isString().isByteLength({ max: 72 }).isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+    body('avatarUrl').optional({ nullable: true }).isString().isLength({ max: 2048 }),
   ],
   validate,
   asyncHandler(async (req, res) => {
     const user = await updateUser(req.user.id, {
       name: req.body.name,
       password: req.body.password,
+      avatarUrl: req.body.avatarUrl,
     });
     res.json({ success: true, data: { user } });
   })

@@ -40,17 +40,29 @@ model User {
   name             String
   email            String             @unique
   password         String
+  avatarUrl        String?
   googleId         String?            @unique
   firebaseUid      String?            @unique
   clerkId          String?            @unique
   role             Role               @default(USER)
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
+  cart             Cart?
   orders           Order[]
   favorites        Favorite[]
   priceAlerts      PriceAlert[]
   notifications    Notification[]
   chatConversations ChatConversation[]
+}
+
+model Cart {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  version   Int      @default(0)
+  items     Json     @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model ChatConversation {
@@ -153,6 +165,7 @@ model Notification {
 
 model Order {
   id              String      @id @default(cuid())
+  orderNumber     String?     @unique
   userId          String
   user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   status          OrderStatus @default(PENDING)
@@ -166,6 +179,8 @@ model Order {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   items           OrderItem[]
+
+  @@index([userId, createdAt])
 }
 
 model OrderItem {

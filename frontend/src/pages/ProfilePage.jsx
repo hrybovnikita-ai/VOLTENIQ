@@ -14,6 +14,7 @@ export default function ProfilePage() {
   const [notifications, setNotifications] = useState([])
   const [loading, setLoading] = useState(true)
   const [name, setName] = useState('')
+  const [avatarUrl, setAvatarUrl] = useState('')
   const [password, setPassword] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -30,7 +31,10 @@ export default function ProfilePage() {
   }, [authLoading, isAuthenticated, navigate])
 
   useEffect(() => {
-    if (user) setName(user.name || '')
+    if (user) {
+      setName(user.name || '')
+      setAvatarUrl(user.avatarUrl || '')
+    }
   }, [user])
 
   useEffect(() => {
@@ -63,7 +67,11 @@ export default function ProfilePage() {
     setMessage('')
     setError('')
     try {
-      await updateProfile({ name, ...(password ? { password } : {}) })
+      await updateProfile({
+        name,
+        avatarUrl: avatarUrl.trim() || null,
+        ...(password ? { password } : {}),
+      })
       setPassword('')
       setMessage('Profile updated')
     } catch (err) {
@@ -107,11 +115,33 @@ export default function ProfilePage() {
       <div className="split-layout split-layout--profile">
         <form id="settings" style={{ scrollMarginTop: 80 }} onSubmit={onSave} className="glass rounded-[16px] sm:rounded-[20px] p-4 sm:p-6 space-y-4 h-fit min-w-0">
           <h2 className="font-display text-xl font-bold">Account</h2>
+          <div className="flex items-center gap-4">
+            <div className="grid h-16 w-16 place-items-center overflow-hidden rounded-full border border-silver/30 bg-graphite text-xl font-bold text-volt">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                (user.name || user.email || 'U').slice(0, 1).toUpperCase()
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold truncate">{user.name}</p>
+              <p className="text-sm text-muted truncate">{user.email}</p>
+            </div>
+          </div>
           <div>
             <label className="block text-sm font-medium mb-1.5">Name</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-[14px] border border-silver/30 bg-white/50 dark:bg-graphite/50 px-4 py-2.5 outline-none focus:border-volt"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1.5">Avatar URL</label>
+            <input
+              value={avatarUrl}
+              onChange={(e) => setAvatarUrl(e.target.value)}
+              placeholder="https://…"
               className="w-full rounded-[14px] border border-silver/30 bg-white/50 dark:bg-graphite/50 px-4 py-2.5 outline-none focus:border-volt"
             />
           </div>
@@ -208,7 +238,7 @@ export default function ProfilePage() {
                 >
                   <div className="flex flex-wrap justify-between gap-2 mb-3">
                     <div>
-                      <p className="font-semibold">Order {order.id.slice(0, 8)}…</p>
+                      <p className="font-semibold">{order.orderNumber || `Order ${order.id.slice(0, 8)}`}</p>
                       <p className="text-xs text-muted">{formatDate(order.createdAt)}</p>
                     </div>
                     <div className="text-right">
@@ -220,6 +250,9 @@ export default function ProfilePage() {
                     {order.items?.map((item) => (
                       <li key={item.id}>
                         {item.product?.name || 'Product'} × {item.quantity}
+                        {item.storage ? ` · ${item.storage}` : ''}
+                        {' · '}
+                        {formatPrice(item.price)}
                       </li>
                     ))}
                   </ul>

@@ -69,6 +69,9 @@ export const api = {
   getOrders: () => request('get', '/orders'),
   getOrder: (id) => request('get', `/orders/${id}`),
   createOrder: (body) => request('post', '/orders', { data: body }),
+  getCart: () => request('get', '/cart'),
+  saveCart: (body) => request('put', '/cart', { data: body }),
+  clearCart: () => request('delete', '/cart'),
   getFavorites: () => request('get', '/favorites'),
   toggleFavorite: (productId) =>
     request('post', '/favorites/toggle', { data: { productId } }),

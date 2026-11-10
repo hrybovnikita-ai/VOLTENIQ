@@ -66,5 +66,6 @@ export async function verifyClerkSessionToken(token) {
     emailVerified: true,
     name: name || null,
     googleId: googleAccount?.providerUserId || null,
+    avatarUrl: clerkUser.imageUrl || null,
   };
 }

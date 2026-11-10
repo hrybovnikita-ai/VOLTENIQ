@@ -83,7 +83,7 @@ export async function sessionUser(req) {
   const session = await prisma.session.findFirst({
     where: { id, expiresAt: { gt: new Date() } },
     select: {
-      user: { select: { id: true, name: true, email: true, role: true } },
+      user: { select: { id: true, name: true, email: true, avatarUrl: true, role: true } },
     },
   });
 

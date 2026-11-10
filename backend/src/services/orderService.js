@@ -4,6 +4,13 @@ import { prisma } from '../db/prisma.js';
 import { createId, getDemoStore } from '../db/demoStore.js';
 import { getProductById } from './productService.js';
 import { getUnitPrice } from '../utils/pricing.js';
+import { clearCart } from './cartService.js';
+
+function buildOrderNumber() {
+  const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `VOL-${stamp}-${suffix}`;
+}
 
 export async function createOrder(userId, payload) {
   const { items, shipping } = payload;
@@ -77,10 +84,13 @@ export async function createOrder(userId, payload) {
     throw err;
   }
 
+  const orderNumber = buildOrderNumber();
+
   if (config.demoMode) {
     const store = await getDemoStore();
     const order = {
       id: createId(),
+      orderNumber,
       userId,
       status: 'PENDING',
       total: Math.round(total * 100) / 100,
@@ -112,10 +122,11 @@ export async function createOrder(userId, payload) {
     }
 
     store.orders.unshift(order);
+    await clearCart(userId).catch(() => {});
     return order;
   }
 
-  return prisma.$transaction(async (tx) => {
+  const order = await prisma.$transaction(async (tx) => {
     for (const item of lineItems) {
       const updated = await tx.product.updateMany({
         where: { id: item.productId, stock: { gte: item.quantity } },
@@ -130,6 +141,7 @@ export async function createOrder(userId, payload) {
     return tx.order.create({
       data: {
         userId,
+        orderNumber,
         total: Math.round(total * 100) / 100,
         shippingName: shipping.name,
         shippingAddress: shipping.address,
@@ -154,6 +166,9 @@ export async function createOrder(userId, payload) {
       },
     });
   });
+
+  await clearCart(userId).catch(() => {});
+  return order;
 }
 
 export async function getOrdersByUser(userId) {

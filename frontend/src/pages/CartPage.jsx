@@ -11,7 +11,7 @@ import EmptyState from '../components/ui/EmptyState'
 export default function CartPage() {
   const navigate = useNavigate()
   const { isAuthenticated } = useAuth()
-  const { items, updateQuantity, removeItem, subtotal, clearCart } = useCart()
+  const { items, updateQuantity, removeItem, subtotal, clearCart, syncing, error } = useCart()
 
   if (!items.length) {
     return (
@@ -31,12 +31,20 @@ export default function CartPage() {
       <div className="flex flex-wrap items-end justify-between gap-3 mb-6 sm:mb-8">
         <div className="min-w-0">
           <h1 className="page-title">Bag</h1>
-          <p className="text-muted mt-1 text-sm sm:text-base">Demo cart — no payment required</p>
+          <p className="text-muted mt-1 text-sm sm:text-base">
+            Demo cart — no payment required
+            {isAuthenticated ? (syncing ? ' · syncing…' : ' · saved to your account') : ''}
+          </p>
         </div>
         <button type="button" onClick={clearCart} className="text-sm text-muted hover:text-volt">
           Clear bag
         </button>
       </div>
+      {error && (
+        <p role="alert" className="mb-4 rounded-[12px] border border-red-400/40 bg-red-500/10 px-4 py-2 text-sm">
+          {error}
+        </p>
+      )}
 
       <div className="split-layout">
         <div className="space-y-3 sm:space-y-4 min-w-0">

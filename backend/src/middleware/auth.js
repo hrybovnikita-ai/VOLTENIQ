@@ -24,6 +24,7 @@ export async function authenticate(req, res, next) {
         name: claims.name,
         emailVerified: claims.emailVerified,
         googleId: claims.googleId,
+        avatarUrl: claims.avatarUrl,
       });
       await startSession(req, res, user.id);
       req.user = user;
@@ -32,8 +33,11 @@ export async function authenticate(req, res, next) {
 
     return res.status(401).json({ success: false, message: 'Authentication required' });
   } catch (error) {
-    if (error.status === 401 || error.status === 409) {
-      return res.status(error.status).json({ success: false, message: error.message });
+    if (error.status === 401) {
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+    if (error.status === 409) {
+      return res.status(409).json({ success: false, message: error.message });
     }
     next(error);
   }

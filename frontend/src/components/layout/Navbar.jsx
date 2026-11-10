@@ -172,8 +172,12 @@ export default function Navbar() {
                     aria-label="Account menu"
                     className="flex cursor-pointer list-none items-center gap-2 rounded-full border border-silver/15 bg-graphite/90 py-1 pl-1 pr-2.5 text-volt [&::-webkit-details-marker]:hidden"
                   >
-                    <span className="grid h-8 w-8 place-items-center rounded-full bg-ink text-sm font-bold text-volt">
-                      {initials(user)}
+                    <span className="grid h-8 w-8 place-items-center overflow-hidden rounded-full bg-ink text-sm font-bold text-volt">
+                      {user.avatarUrl ? (
+                        <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        initials(user)
+                      )}
                     </span>
                     <span className="hidden max-w-[7.5rem] truncate text-xs font-semibold text-snow/90 lg:inline">
                       {displayName(user)}

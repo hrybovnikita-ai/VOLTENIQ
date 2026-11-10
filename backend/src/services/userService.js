@@ -4,8 +4,8 @@ import { prisma } from '../db/prisma.js';
 
 function sanitize(user) {
   if (!user) return null;
-  const { id, name, email, role, createdAt, updatedAt } = user;
-  return { id, name, email, role, createdAt, updatedAt };
+  const { id, name, email, avatarUrl, role, createdAt, updatedAt } = user;
+  return { id, name, email, avatarUrl: avatarUrl || null, role, createdAt, updatedAt };
 }
 
 export async function findUserByEmail(email) {
@@ -36,6 +36,7 @@ export async function createUser({
   googleId = null,
   firebaseUid = null,
   clerkId = null,
+  avatarUrl = null,
 }) {
   const hashed = password
     ? await bcrypt.hash(password, 10)
@@ -44,9 +45,9 @@ export async function createUser({
   try {
     // Omit role entirely so PostgreSQL supplies USER. The API login cannot grant roles.
     const [user] = await prisma.$queryRaw`
-      INSERT INTO public."User" (id, name, email, password, "googleId", "firebaseUid", "clerkId", "updatedAt")
-      VALUES (${crypto.randomUUID()}, ${name}, ${email.toLowerCase()}, ${hashed}, ${googleId}, ${firebaseUid}, ${clerkId}, CURRENT_TIMESTAMP)
-      RETURNING id, name, email, "googleId", "firebaseUid", "clerkId", role::text AS role, "createdAt", "updatedAt"
+      INSERT INTO public."User" (id, name, email, password, "googleId", "firebaseUid", "clerkId", "avatarUrl", "updatedAt")
+      VALUES (${crypto.randomUUID()}, ${name}, ${email.toLowerCase()}, ${hashed}, ${googleId}, ${firebaseUid}, ${clerkId}, ${avatarUrl}, CURRENT_TIMESTAMP)
+      RETURNING id, name, email, "avatarUrl", "googleId", "firebaseUid", "clerkId", role::text AS role, "createdAt", "updatedAt"
     `;
     return sanitize(user);
   } catch (error) {
@@ -70,6 +71,7 @@ export async function findOrCreateClerkUser({
   name,
   emailVerified = false,
   googleId = null,
+  avatarUrl = null,
 }) {
   if (!clerkId || !email) {
     const err = new Error('Clerk account email is required');
@@ -92,6 +94,7 @@ export async function findOrCreateClerkUser({
     const patch = {};
     if (name && !existingByClerk.name) patch.name = name;
     if (googleId && !existingByClerk.googleId) patch.googleId = googleId;
+    if (avatarUrl) patch.avatarUrl = avatarUrl;
     if (Object.keys(patch).length) {
       const updated = await prisma.user.update({
         where: { id: existingByClerk.id },
@@ -117,6 +120,7 @@ export async function findOrCreateClerkUser({
         clerkId,
         ...(googleId && !existingByEmail.googleId ? { googleId } : {}),
         ...(name && !existingByEmail.name ? { name } : {}),
+        ...(avatarUrl ? { avatarUrl } : {}),
       },
     });
     return sanitize(updated);
@@ -128,6 +132,7 @@ export async function findOrCreateClerkUser({
     password: null,
     clerkId,
     googleId,
+    avatarUrl,
   });
 }
 
@@ -195,6 +200,9 @@ export async function updateUser(id, data) {
   const update = {};
   if (data.name) update.name = data.name;
   if (data.password) update.password = await bcrypt.hash(data.password, 10);
+  if (data.avatarUrl !== undefined) {
+    update.avatarUrl = data.avatarUrl ? String(data.avatarUrl).slice(0, 2048) : null;
+  }
 
   const user = await prisma.user.update({ where: { id }, data: update });
   return sanitize(user);

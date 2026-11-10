@@ -28,9 +28,12 @@ export default function AdminPage() {
   const [stats, setStats] = useState(null)
   const [products, setProducts] = useState([])
   const [orders, setOrders] = useState([])
+  const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(emptyProduct)
   const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
+  const [editing, setEditing] = useState({})
 
   useEffect(() => {
     if (!authLoading && !isAdmin) navigate('/login')
@@ -40,14 +43,16 @@ export default function AdminPage() {
     setLoading(true)
     setError('')
     try {
-      const [s, p, o] = await Promise.all([
+      const [s, p, o, u] = await Promise.all([
         api.adminStats(),
         api.adminProducts(),
         api.adminOrders(),
+        api.adminUsers(),
       ])
       setStats(s.data.stats)
       setProducts(p.data.products || [])
       setOrders(o.data.orders || [])
+      setUsers(u.data.users || [])
     } catch (err) {
       setError(err.message || 'Failed to load admin data')
     } finally {
@@ -71,6 +76,7 @@ export default function AdminPage() {
       }
       await api.adminCreateProduct(payload)
       setForm(emptyProduct)
+      setMessage('Product created')
       await load()
       setTab('products')
     } catch (err) {
@@ -84,8 +90,29 @@ export default function AdminPage() {
     await load()
   }
 
+  const saveProductFields = async (id) => {
+    const draft = editing[id]
+    if (!draft) return
+    try {
+      await api.adminUpdateProduct(id, {
+        price: Number(draft.price),
+        stock: Number(draft.stock),
+      })
+      setEditing((prev) => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
+      setMessage('Product updated')
+      await load()
+    } catch (err) {
+      setError(err.message || 'Update failed')
+    }
+  }
+
   const updateStatus = async (id, status) => {
     await api.adminUpdateOrderStatus(id, status)
+    setMessage(`Order marked ${status}`)
     await load()
   }
 
@@ -100,10 +127,12 @@ export default function AdminPage() {
   return (
     <div className="container-shell page-section">
       <h1 className="page-title mb-2">Admin</h1>
-      <p className="text-muted mb-5 sm:mb-6 text-sm sm:text-base">Manage demo products and orders</p>
+      <p className="text-muted mb-5 sm:mb-6 text-sm sm:text-base">
+        Manage products, stock, users, and demo orders
+      </p>
 
       <div className="flex flex-wrap gap-2 mb-8">
-        {['overview', 'products', 'orders', 'create'].map((t) => (
+        {['overview', 'products', 'orders', 'users', 'create'].map((t) => (
           <button
             key={t}
             type="button"
@@ -118,6 +147,7 @@ export default function AdminPage() {
       </div>
 
       {error && <p className="text-sm text-red-500 mb-4">{error}</p>}
+      {message && <p className="text-sm text-green-600 mb-4">{message}</p>}
 
       {tab === 'overview' && stats && (
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -137,20 +167,95 @@ export default function AdminPage() {
 
       {tab === 'products' && (
         <div className="space-y-3">
-          {products.map((p) => (
-            <div key={p.id} className="glass rounded-[16px] p-4 flex flex-wrap items-center gap-4">
-              <img src={p.image} alt="" className="w-16 h-16 rounded-[12px] object-contain bg-silver/10 p-1" />
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold truncate">{p.name}</p>
-                <p className="text-sm text-muted">
-                  {p.category} · {formatPrice(p.price)} · stock {p.stock}
-                </p>
+          {products.map((p) => {
+            const draft = editing[p.id] || { price: p.price, stock: p.stock }
+            const isEditing = Boolean(editing[p.id])
+            return (
+              <div key={p.id} className="glass rounded-[16px] p-4 flex flex-wrap items-center gap-4">
+                <img
+                  src={p.image}
+                  alt=""
+                  className="w-16 h-16 rounded-[12px] object-contain bg-silver/10 p-1"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold truncate">{p.name}</p>
+                  <p className="text-sm text-muted">{p.category}</p>
+                </div>
+                {isEditing ? (
+                  <div className="flex flex-wrap items-end gap-2">
+                    <label className="text-xs text-muted">
+                      Price
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={draft.price}
+                        onChange={(e) =>
+                          setEditing((prev) => ({
+                            ...prev,
+                            [p.id]: { ...draft, price: e.target.value },
+                          }))
+                        }
+                        className="mt-1 block w-24 rounded-[10px] border border-silver/30 bg-transparent px-2 py-1.5 text-sm"
+                      />
+                    </label>
+                    <label className="text-xs text-muted">
+                      Stock
+                      <input
+                        type="number"
+                        min="0"
+                        value={draft.stock}
+                        onChange={(e) =>
+                          setEditing((prev) => ({
+                            ...prev,
+                            [p.id]: { ...draft, stock: e.target.value },
+                          }))
+                        }
+                        className="mt-1 block w-20 rounded-[10px] border border-silver/30 bg-transparent px-2 py-1.5 text-sm"
+                      />
+                    </label>
+                    <Button size="sm" onClick={() => saveProductFields(p.id)}>
+                      Save
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        setEditing((prev) => {
+                          const next = { ...prev }
+                          delete next[p.id]
+                          return next
+                        })
+                      }
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-sm">
+                      {formatPrice(p.price)} · stock {p.stock}
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="soft"
+                      onClick={() =>
+                        setEditing((prev) => ({
+                          ...prev,
+                          [p.id]: { price: p.price, stock: p.stock },
+                        }))
+                      }
+                    >
+                      Edit
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => removeProduct(p.id)}>
+                      Delete
+                    </Button>
+                  </>
+                )}
               </div>
-              <Button variant="ghost" size="sm" onClick={() => removeProduct(p.id)}>
-                Delete
-              </Button>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
@@ -160,11 +265,19 @@ export default function AdminPage() {
             <div key={order.id} className="glass rounded-[16px] p-4">
               <div className="flex flex-wrap justify-between gap-3 mb-3">
                 <div>
-                  <p className="font-semibold">{order.user?.email || order.userId}</p>
+                  <p className="font-semibold">{order.orderNumber || order.id.slice(0, 8)}</p>
+                  <p className="text-sm">{order.user?.email || order.userId}</p>
                   <p className="text-xs text-muted">{formatDate(order.createdAt)}</p>
                 </div>
                 <p className="font-bold">{formatPrice(order.total)}</p>
               </div>
+              <ul className="mb-3 text-sm text-muted space-y-1">
+                {order.items?.map((item) => (
+                  <li key={item.id}>
+                    {item.product?.name || 'Product'} × {item.quantity}
+                  </li>
+                ))}
+              </ul>
               <div className="flex flex-wrap gap-2 items-center">
                 <select
                   value={order.status}
@@ -182,6 +295,31 @@ export default function AdminPage() {
             </div>
           ))}
           {!orders.length && <p className="text-muted">No demo orders yet.</p>}
+        </div>
+      )}
+
+      {tab === 'users' && (
+        <div className="space-y-3">
+          {users.map((user) => (
+            <div key={user.id} className="glass rounded-[16px] p-4 flex flex-wrap items-center gap-4">
+              <div className="grid h-11 w-11 place-items-center overflow-hidden rounded-full bg-graphite text-sm font-bold text-volt">
+                {user.avatarUrl ? (
+                  <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  (user.name || user.email || 'U').slice(0, 1).toUpperCase()
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold truncate">{user.name}</p>
+                <p className="text-sm text-muted truncate">{user.email}</p>
+              </div>
+              <span className="rounded-full border border-silver/30 px-3 py-1 text-xs font-semibold uppercase tracking-wider">
+                {user.role}
+              </span>
+              <span className="text-xs text-muted">{formatDate(user.createdAt)}</span>
+            </div>
+          ))}
+          {!users.length && <p className="text-muted">No users found.</p>}
         </div>
       )}
 
