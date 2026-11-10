@@ -82,6 +82,7 @@ function OptionGroup({ label, options, value, onChange, priceHints, optionKey })
 
 import CompleteSetup from '../components/products/CompleteSetup'
 import ProductExpert from '../components/products/ProductExpert'
+import ProductReviews from '../components/reviews/ProductReviews'
 
 export default function ProductDetailPage() {
   const { id } = useParams()
@@ -190,9 +191,19 @@ export default function ProductDetailPage() {
           <div className="glass rounded-[16px] p-4 mb-6 space-y-2">
             <div className="flex items-end justify-between gap-3">
               <span className="text-sm text-muted">Unit price</span>
-              <span className="text-[clamp(1.5rem,1.2rem+1.5vw,1.875rem)] font-bold tabular-nums">
-                {formatPrice(unitPrice)}
-              </span>
+              <div className="text-right">
+                {product.compareAt && Number(product.compareAt) > unitPrice ? (
+                  <p className="text-sm text-muted line-through tabular-nums">{formatPrice(product.compareAt)}</p>
+                ) : null}
+                <span className="text-[clamp(1.5rem,1.2rem+1.5vw,1.875rem)] font-bold tabular-nums text-volt">
+                  {formatPrice(unitPrice)}
+                </span>
+                {product.compareAt && Number(product.compareAt) > unitPrice ? (
+                  <span className="ml-2 inline-flex rounded-full bg-volt/15 text-volt text-[10px] font-bold uppercase tracking-wider px-2 py-0.5">
+                    Save {formatPrice(Number(product.compareAt) - unitPrice)}
+                  </span>
+                ) : null}
+              </div>
             </div>
             <div className="flex items-end justify-between gap-3">
               <span className="text-sm text-muted">
@@ -373,6 +384,17 @@ export default function ProductDetailPage() {
       </div>
       <ProductExpert key={product.id + JSON.stringify(selections)} product={product} selections={selections} unitPrice={unitPrice} />
       <CompleteSetup key={product.id} product={product} selections={selections} unitPrice={unitPrice} quantity={safeQty} />
+      <ProductReviews
+        productId={product.id}
+        onStats={(summary) => {
+          if (!summary) return
+          setProduct((prev) =>
+            prev
+              ? { ...prev, rating: summary.average, reviewCount: summary.reviewCount }
+              : prev
+          )
+        }}
+      />
     </div>
   )
 }

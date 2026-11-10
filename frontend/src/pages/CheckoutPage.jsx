@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, CreditCard, ShieldCheck, Wallet } from 'lucide-react'
+import { ArrowLeft, CreditCard, ShieldCheck, Tag, Wallet } from 'lucide-react'
 import { useCart } from '../context/CartContext'
 import { api } from '../api/client'
 import { clearPurchaseIntent, loadPurchaseIntent } from '../utils/purchaseIntent'
@@ -73,12 +73,49 @@ export default function CheckoutPage() {
   const [fieldErrors, setFieldErrors] = useState({})
   const [error, setError] = useState('')
   const [pending, setPending] = useState(false)
+  const [promoInput, setPromoInput] = useState('')
+  const [promo, setPromo] = useState(null)
+  const [discountAmount, setDiscountAmount] = useState(0)
+  const [promoError, setPromoError] = useState('')
+  const [promoPending, setPromoPending] = useState(false)
   const submitting = useRef(false)
   const card = isCardMethod(method)
-  const total = items.reduce(
+  const subtotal = items.reduce(
     (sum, item) => sum + getLineTotal(item.unitPrice ?? item.price, item.quantity),
     0
   )
+  const total = Math.max(0, Math.round((subtotal - discountAmount) * 100) / 100)
+
+  async function applyPromo() {
+    setPromoPending(true)
+    setPromoError('')
+    try {
+      const res = await api.validatePromo({
+        code: promoInput,
+        items: items.map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          configuration: selections(item),
+        })),
+      })
+      setPromo(res.data.promo)
+      setDiscountAmount(res.data.discountAmount || 0)
+      setPromoInput(res.data.promo.code)
+    } catch (err) {
+      setPromo(null)
+      setDiscountAmount(0)
+      setPromoError(err.message || 'Invalid promo code')
+    } finally {
+      setPromoPending(false)
+    }
+  }
+
+  function clearPromo() {
+    setPromo(null)
+    setDiscountAmount(0)
+    setPromoInput('')
+    setPromoError('')
+  }
 
   function updateField(key, formatter) {
     return (event) => {
@@ -123,6 +160,7 @@ export default function CheckoutPage() {
       method,
       expectedTotal: total,
       selections,
+      promoCode: promo?.code || undefined,
     })
 
     if (!assertNoCardSecrets(payload)) {
@@ -184,11 +222,47 @@ export default function CheckoutPage() {
               <strong>{money.format(getLineTotal(item.unitPrice ?? item.price, item.quantity))}</strong>
             </article>
           ))}
+          <div className="demo-promo">
+            <label htmlFor="promoCode">
+              <Tag size={16} /> Promo code
+            </label>
+            <div className="demo-promo-row">
+              <input
+                id="promoCode"
+                value={promoInput}
+                disabled={pending || promoPending}
+                onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
+                placeholder="VOLTENIQ10"
+              />
+              {promo ? (
+                <button type="button" onClick={clearPromo} disabled={pending}>
+                  Remove
+                </button>
+              ) : (
+                <button type="button" onClick={applyPromo} disabled={pending || promoPending || !promoInput.trim()}>
+                  {promoPending ? 'Checking…' : 'Apply'}
+                </button>
+              )}
+            </div>
+            {promo ? (
+              <p className="demo-promo-ok">
+                {promo.code} applied · −{money.format(discountAmount)}
+              </p>
+            ) : null}
+            {promoError ? <p className="demo-form-error">{promoError}</p> : null}
+            <p className="demo-promo-hint">Try VOLTENIQ10 or SAVE25 — demo coupons only.</p>
+          </div>
           <dl>
             <div>
               <dt>Subtotal</dt>
-              <dd>{money.format(total)}</dd>
+              <dd>{money.format(subtotal)}</dd>
             </div>
+            {discountAmount > 0 ? (
+              <div>
+                <dt>Discount</dt>
+                <dd>−{money.format(discountAmount)}</dd>
+              </div>
+            ) : null}
             <div>
               <dt>Delivery</dt>
               <dd>Free</dd>

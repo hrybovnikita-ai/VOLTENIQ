@@ -5,11 +5,35 @@ import { createId, getDemoStore } from '../db/demoStore.js';
 import { getProductById } from './productService.js';
 import { getUnitPrice } from '../utils/pricing.js';
 import { clearCart } from './cartService.js';
+import {
+  assertPromoUsable,
+  computeDiscount,
+  getPromoByCode,
+  normalizeCode,
+} from './promoService.js';
+import { createNotification } from './notificationService.js';
+
+const ORDER_INCLUDE = {
+  items: { include: { product: true } },
+  statusHistory: { orderBy: { createdAt: 'asc' } },
+  user: { select: { id: true, name: true, email: true } },
+};
 
 function buildOrderNumber() {
   const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
   return `VOL-${stamp}-${suffix}`;
+}
+
+function estimatedDeliveryFrom(status, now = new Date()) {
+  const days = status === 'SHIPPED' ? 3 : status === 'PROCESSING' ? 5 : 7;
+  const date = new Date(now);
+  date.setDate(date.getDate() + days);
+  return date;
+}
+
+function buildTrackingNumber() {
+  return `VQ${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 }
 
 export async function createOrder(userId, payload) {
@@ -22,7 +46,7 @@ export async function createOrder(userId, payload) {
   }
 
   const lineItems = [];
-  let total = 0;
+  let subtotal = 0;
 
   for (const item of items) {
     const product = await getProductById(item.productId);
@@ -61,10 +85,9 @@ export async function createOrder(userId, payload) {
         }
       }
     }
-    // Server recalculates unit price from variants — never trusts a pre-multiplied total
     const unitPrice = getUnitPrice(product, selections);
     const lineTotal = Math.round(unitPrice * quantity * 100) / 100;
-    total += lineTotal;
+    subtotal += lineTotal;
     lineItems.push({
       productId: product.id,
       quantity,
@@ -78,13 +101,27 @@ export async function createOrder(userId, payload) {
     });
   }
 
+  subtotal = Math.round(subtotal * 100) / 100;
+  let discountAmount = 0;
+  let promo = null;
+  const promoCodeRaw = payload.promoCode ? normalizeCode(payload.promoCode) : '';
+
+  if (promoCodeRaw) {
+    promo = await getPromoByCode(promoCodeRaw);
+    await assertPromoUsable(promo, userId);
+    discountAmount = computeDiscount(promo, lineItems, subtotal);
+  }
+
+  const total = Math.round(Math.max(0, subtotal - discountAmount) * 100) / 100;
+
   if (payload.expectedTotal != null && Math.round(total * 100) !== Math.round(payload.expectedTotal * 100)) {
-    const err = new Error('The product price changed. Review your selection before purchasing.');
+    const err = new Error('The order total changed. Review your selection and promo before purchasing.');
     err.status = 409;
     throw err;
   }
 
   const orderNumber = buildOrderNumber();
+  const estimatedDelivery = estimatedDeliveryFrom('PENDING');
 
   if (config.demoMode) {
     const store = await getDemoStore();
@@ -93,7 +130,14 @@ export async function createOrder(userId, payload) {
       orderNumber,
       userId,
       status: 'PENDING',
-      total: Math.round(total * 100) / 100,
+      subtotal,
+      discountAmount,
+      total,
+      promoCodeId: promo?.id || null,
+      promoCodeSnapshot: promo?.code || null,
+      trackingNumber: null,
+      estimatedDelivery: estimatedDelivery.toISOString(),
+      trackingDemoNote: 'Simulated tracking for the VOLTENIQ demo store — no real shipment.',
       shippingName: shipping.name,
       shippingAddress: shipping.address,
       shippingCity: shipping.city,
@@ -102,6 +146,14 @@ export async function createOrder(userId, payload) {
       demoNote: 'DEMO ORDER — no real payment processed',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      statusHistory: [
+        {
+          id: createId(),
+          status: 'PENDING',
+          note: 'Demo order placed',
+          createdAt: new Date().toISOString(),
+        },
+      ],
       items: lineItems.map((li) => ({
         id: createId(),
         productId: li.productId,
@@ -138,11 +190,33 @@ export async function createOrder(userId, payload) {
         throw err;
       }
     }
-    return tx.order.create({
+
+    if (promo) {
+      const bumped = await tx.promoCode.updateMany({
+        where: {
+          id: promo.id,
+          active: true,
+          OR: [{ maxUses: null }, { usedCount: { lt: promo.maxUses } }],
+        },
+        data: { usedCount: { increment: 1 } },
+      });
+      if (!bumped.count) {
+        const err = new Error('Promo code usage limit reached.');
+        err.status = 400;
+        throw err;
+      }
+    }
+
+    const created = await tx.order.create({
       data: {
         userId,
         orderNumber,
-        total: Math.round(total * 100) / 100,
+        subtotal,
+        discountAmount,
+        total,
+        promoCodeId: promo?.id || null,
+        promoCodeSnapshot: promo?.code || null,
+        estimatedDelivery,
         shippingName: shipping.name,
         shippingAddress: shipping.address,
         shippingCity: shipping.city,
@@ -160,14 +234,39 @@ export async function createOrder(userId, payload) {
             configuration: { ...li.configuration },
           })),
         },
+        statusHistory: {
+          create: {
+            status: 'PENDING',
+            note: 'Demo order placed',
+            createdBy: userId,
+          },
+        },
       },
-      include: {
-        items: { include: { product: true } },
-      },
+      include: ORDER_INCLUDE,
     });
+
+    if (promo) {
+      await tx.promoRedemption.create({
+        data: {
+          promoCodeId: promo.id,
+          userId,
+          orderId: created.id,
+          amount: discountAmount,
+        },
+      });
+    }
+
+    return created;
   });
 
   await clearCart(userId).catch(() => {});
+  await createNotification({
+    userId,
+    type: 'order_status',
+    orderId: order.id,
+    message: `Order ${order.orderNumber || order.id} is Pending. Simulated tracking is available in your account.`,
+  }).catch(() => {});
+
   return order;
 }
 
@@ -178,7 +277,10 @@ export async function getOrdersByUser(userId) {
   }
   return prisma.order.findMany({
     where: { userId },
-    include: { items: { include: { product: true } } },
+    include: {
+      items: { include: { product: true } },
+      statusHistory: { orderBy: { createdAt: 'asc' } },
+    },
     orderBy: { createdAt: 'desc' },
   });
 }
@@ -194,7 +296,7 @@ export async function getOrderById(id, userId, isAdmin = false) {
 
   const order = await prisma.order.findUnique({
     where: { id },
-    include: { items: { include: { product: true } }, user: { select: { id: true, name: true, email: true } } },
+    include: ORDER_INCLUDE,
   });
   if (!order) return null;
   if (!isAdmin && order.userId !== userId) return null;
@@ -204,7 +306,7 @@ export async function getOrderById(id, userId, isAdmin = false) {
 export async function listAllOrders() {
   if (config.demoMode) {
     const store = await getDemoStore();
-    const users = new Map((await listUsers()).map(user => [user.id, user]));
+    const users = new Map((await listUsers()).map((user) => [user.id, user]));
     return store.orders.map((order) => {
       const user = users.get(order.userId);
       return {
@@ -214,34 +316,94 @@ export async function listAllOrders() {
     });
   }
   return prisma.order.findMany({
-    include: {
-      items: { include: { product: true } },
-      user: { select: { id: true, name: true, email: true } },
-    },
+    include: ORDER_INCLUDE,
     orderBy: { createdAt: 'desc' },
   });
 }
 
-export async function updateOrderStatus(id, status) {
+export async function updateOrderTracking(id, { status, trackingNumber, estimatedDelivery, note, adminId }) {
   const allowed = ['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'];
-  if (!allowed.includes(status)) {
+  const existing = config.demoMode
+    ? (await getDemoStore()).orders.find((o) => o.id === id)
+    : await prisma.order.findUnique({ where: { id } });
+  if (!existing) return null;
+
+  const nextStatus = status || existing.status;
+  if (!allowed.includes(nextStatus)) {
     const err = new Error('Invalid order status');
     err.status = 400;
     throw err;
   }
 
-  if (config.demoMode) {
-    const store = await getDemoStore();
-    const order = store.orders.find((o) => o.id === id);
-    if (!order) return null;
-    order.status = status;
-    order.updatedAt = new Date().toISOString();
-    return order;
+  let nextTracking = trackingNumber !== undefined ? trackingNumber : existing.trackingNumber;
+  if (['SHIPPED', 'DELIVERED'].includes(nextStatus) && !nextTracking) {
+    nextTracking = buildTrackingNumber();
   }
 
-  return prisma.order.update({
-    where: { id },
-    data: { status },
-    include: { items: { include: { product: true } }, user: { select: { id: true, name: true, email: true } } },
+  let nextEta = estimatedDelivery !== undefined
+    ? (estimatedDelivery ? new Date(estimatedDelivery) : null)
+    : existing.estimatedDelivery;
+  if (!nextEta && nextStatus !== 'CANCELLED' && nextStatus !== 'DELIVERED') {
+    nextEta = estimatedDeliveryFrom(nextStatus);
+  }
+
+  const historyNote =
+    note
+    || (status && status !== existing.status
+      ? `Status updated to ${nextStatus} (simulated tracking)`
+      : 'Tracking details updated (simulated)');
+
+  if (config.demoMode) {
+    existing.status = nextStatus;
+    existing.trackingNumber = nextTracking;
+    existing.estimatedDelivery = nextEta ? new Date(nextEta).toISOString() : null;
+    existing.updatedAt = new Date().toISOString();
+    existing.statusHistory = existing.statusHistory || [];
+    existing.statusHistory.push({
+      id: createId(),
+      status: nextStatus,
+      note: historyNote,
+      createdAt: new Date().toISOString(),
+      createdBy: adminId || null,
+    });
+    return existing;
+  }
+
+  const order = await prisma.$transaction(async (tx) => {
+    const updated = await tx.order.update({
+      where: { id },
+      data: {
+        status: nextStatus,
+        trackingNumber: nextTracking || null,
+        estimatedDelivery: nextEta,
+      },
+      include: ORDER_INCLUDE,
+    });
+
+    await tx.orderStatusEvent.create({
+      data: {
+        orderId: id,
+        status: nextStatus,
+        note: historyNote,
+        createdBy: adminId || null,
+      },
+    });
+
+    return tx.order.findUnique({ where: { id }, include: ORDER_INCLUDE });
   });
+
+  if (status && status !== existing.status) {
+    await createNotification({
+      userId: order.userId,
+      type: 'order_status',
+      orderId: order.id,
+      message: `Order ${order.orderNumber || order.id} is now ${nextStatus}. Simulated tracking updated.`,
+    }).catch(() => {});
+  }
+
+  return order;
+}
+
+export async function updateOrderStatus(id, status, adminId = null) {
+  return updateOrderTracking(id, { status, adminId });
 }

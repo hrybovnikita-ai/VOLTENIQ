@@ -233,6 +233,64 @@
   grid-column: 1 / -1;
 }
 
+.demo-promo {
+  margin: 1rem 0 1.25rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(255, 121, 0, 0.28);
+  border-radius: 14px;
+  background: rgba(255, 121, 0, 0.08);
+}
+
+.demo-promo label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-bottom: 0.55rem;
+}
+
+.demo-promo-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+}
+
+.demo-promo-row input {
+  width: 100%;
+  min-height: 2.6rem;
+  border-radius: 12px;
+  border: 1px solid rgba(173, 173, 179, 0.35);
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  padding: 0.55rem 0.8rem;
+  text-transform: uppercase;
+}
+
+.demo-promo-row button {
+  min-height: 2.6rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 121, 0, 0.45);
+  background: rgba(255, 121, 0, 0.18);
+  color: inherit;
+  font-weight: 600;
+  padding: 0 0.9rem;
+}
+
+.demo-promo-ok,
+.demo-promo-hint {
+  margin-top: 0.45rem;
+  font-size: 0.78rem;
+}
+
+.demo-promo-ok {
+  color: #ff9b56;
+}
+
+.demo-promo-hint {
+  color: #adadb3;
+}
+
 .demo-fill {
   justify-self: start;
   color: #ff9b56;

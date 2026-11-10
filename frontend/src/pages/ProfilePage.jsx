@@ -6,6 +6,7 @@ import { formatDate, formatPrice } from '../utils/format'
 import Button from '../components/ui/Button'
 import Spinner from '../components/ui/Spinner'
 import EmptyState from '../components/ui/EmptyState'
+import OrderTrackingTimeline from '../components/orders/OrderTrackingTimeline'
 
 export default function ProfilePage() {
   const { user, isAuthenticated, loading: authLoading, updateProfile, logout, isAdmin } = useAuth()
@@ -228,35 +229,41 @@ export default function ProfilePage() {
                 onAction={() => navigate('/catalog')}
               />
             )}
-            <div className="space-y-4">
+            <div className="space-y-6">
               {orders.map((order) => (
                 <div
                   key={order.id}
-                  className={`glass rounded-[18px] p-5 ${
-                    highlight === order.id ? 'ring-2 ring-volt' : ''
-                  }`}
+                  className={`space-y-3 ${highlight === order.id ? 'ring-2 ring-volt rounded-[18px] p-1' : ''}`}
                 >
-                  <div className="flex flex-wrap justify-between gap-2 mb-3">
-                    <div>
-                      <p className="font-semibold">{order.orderNumber || `Order ${order.id.slice(0, 8)}`}</p>
-                      <p className="text-xs text-muted">{formatDate(order.createdAt)}</p>
+                  <div className="glass rounded-[18px] p-5">
+                    <div className="flex flex-wrap justify-between gap-2 mb-3">
+                      <div>
+                        <p className="font-semibold">{order.orderNumber || `Order ${order.id.slice(0, 8)}`}</p>
+                        <p className="text-xs text-muted">{formatDate(order.createdAt)}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold">{formatPrice(order.total)}</p>
+                        <p className="text-xs uppercase tracking-wider text-volt">{order.status}</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-bold">{formatPrice(order.total)}</p>
-                      <p className="text-xs uppercase tracking-wider text-volt">{order.status}</p>
-                    </div>
+                    <ul className="text-sm text-muted space-y-1 mb-3">
+                      {order.items?.map((item) => (
+                        <li key={item.id}>
+                          {item.product?.name || 'Product'} × {item.quantity}
+                          {item.storage ? ` · ${item.storage}` : ''}
+                          {' · '}
+                          {formatPrice(item.price)}
+                        </li>
+                      ))}
+                    </ul>
+                    {order.discountAmount > 0 ? (
+                      <p className="text-sm text-volt mb-2">
+                        Promo {order.promoCodeSnapshot}: −{formatPrice(order.discountAmount)}
+                      </p>
+                    ) : null}
+                    <p className="text-xs text-volt">{order.demoNote || 'DEMO ORDER — no real payment'}</p>
                   </div>
-                  <ul className="text-sm text-muted space-y-1 mb-3">
-                    {order.items?.map((item) => (
-                      <li key={item.id}>
-                        {item.product?.name || 'Product'} × {item.quantity}
-                        {item.storage ? ` · ${item.storage}` : ''}
-                        {' · '}
-                        {formatPrice(item.price)}
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="text-xs text-volt">{order.demoNote || 'DEMO ORDER — no real payment'}</p>
+                  <OrderTrackingTimeline order={order} />
                 </div>
               ))}
             </div>

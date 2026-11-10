@@ -133,7 +133,7 @@ export function validateDemoPayment(form, method, now = new Date()) {
 /**
  * Build the order API body. Card number and CVC are never included.
  */
-export function buildDemoOrderPayload({ items, form, method, expectedTotal, selections }) {
+export function buildDemoOrderPayload({ items, form, method, expectedTotal, selections, promoCode }) {
   return {
     items: items.map((item) => ({
       productId: item.productId,
@@ -148,6 +148,7 @@ export function buildDemoOrderPayload({ items, form, method, expectedTotal, sele
       country: (form.country || DEMO_BILLING.country).trim(),
     },
     expectedTotal,
+    ...(promoCode ? { promoCode } : {}),
     // Demo metadata only — no PAN / CVC
     paymentMethod: method,
   }

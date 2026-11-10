@@ -25,6 +25,17 @@ enum OrderStatus {
   CANCELLED
 }
 
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
 model Session {
   id        String   @id
   userId    String
@@ -53,6 +64,8 @@ model User {
   priceAlerts      PriceAlert[]
   notifications    Notification[]
   chatConversations ChatConversation[]
+  reviews          Review[]
+  promoRedemptions PromoRedemption[]
 }
 
 model Cart {
@@ -127,6 +140,7 @@ model Product {
   favorites      Favorite[]
   priceAlerts    PriceAlert[]
   priceHistory   PriceHistory[]
+  reviews        Review[]
 }
 
 model PriceAlert {
@@ -158,29 +172,107 @@ model Notification {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   type      String
   productId String?
+  orderId   String?
   message   String
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 model Order {
-  id              String      @id @default(cuid())
-  orderNumber     String?     @unique
-  userId          String
-  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  status          OrderStatus @default(PENDING)
-  total           Float
-  shippingName    String
-  shippingAddress String
-  shippingCity    String
-  shippingZip     String
-  shippingCountry String      @default("Demo Country")
-  demoNote        String      @default("DEMO ORDER — no real payment processed")
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  items           OrderItem[]
+  id                String             @id @default(cuid())
+  orderNumber       String?            @unique
+  userId            String
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status            OrderStatus        @default(PENDING)
+  subtotal          Float?
+  discountAmount    Float              @default(0)
+  total             Float
+  promoCodeId       String?
+  promoCode         PromoCode?         @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
+  promoCodeSnapshot String?
+  trackingNumber    String?
+  estimatedDelivery DateTime?
+  trackingDemoNote  String             @default("Simulated tracking for the VOLTENIQ demo store — no real shipment.")
+  shippingName      String
+  shippingAddress   String
+  shippingCity      String
+  shippingZip       String
+  shippingCountry   String             @default("Demo Country")
+  demoNote          String             @default("DEMO ORDER — no real payment processed")
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  items             OrderItem[]
+  statusHistory     OrderStatusEvent[]
+  promoRedemption   PromoRedemption?
 
   @@index([userId, createdAt])
+}
+
+model OrderStatusEvent {
+  id        String      @id @default(cuid())
+  orderId   String
+  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status    OrderStatus
+  note      String?
+  createdBy String?
+  createdAt DateTime    @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+model Review {
+  id        String       @id @default(cuid())
+  productId String
+  product   Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rating    Int
+  title     String?
+  body      String
+  photos    String[]
+  verified  Boolean      @default(false)
+  status    ReviewStatus @default(APPROVED)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([userId, productId])
+  @@index([productId, status, createdAt])
+}
+
+model PromoCode {
+  id             String           @id @default(cuid())
+  code           String           @unique
+  description    String?
+  type           DiscountType
+  value          Float
+  minOrderAmount Float            @default(0)
+  maxUses        Int?
+  usedCount      Int              @default(0)
+  perUserLimit   Int              @default(1)
+  startsAt       DateTime?
+  expiresAt      DateTime?
+  active         Boolean          @default(true)
+  productIds     String[]         @default([])
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  orders         Order[]
+  redemptions    PromoRedemption[]
+}
+
+model PromoRedemption {
+  id          String    @id @default(cuid())
+  promoCodeId String
+  promoCode   PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId     String    @unique
+  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  amount      Float
+  createdAt   DateTime  @default(now())
+
+  @@index([promoCodeId, userId])
 }
 
 model OrderItem {

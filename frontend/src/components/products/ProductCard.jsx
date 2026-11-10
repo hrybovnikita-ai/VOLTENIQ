@@ -35,6 +35,11 @@ export default function ProductCard({ product }) {
             Concept
           </span>
         ) : null}
+        {product.compareAt && Number(product.compareAt) > startingPrice ? (
+          <span className="rounded-full bg-volt/90 text-ink text-[9px] sm:text-[10px] font-bold uppercase tracking-wider px-2 py-1">
+            Sale
+          </span>
+        ) : null}
         <span
           className={`rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider px-2 py-1 ${
             inStock ? 'bg-emerald-500/90 text-ink' : 'bg-red-500/90 text-snow'

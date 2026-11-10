@@ -29,11 +29,24 @@ export default function AdminPage() {
   const [products, setProducts] = useState([])
   const [orders, setOrders] = useState([])
   const [users, setUsers] = useState([])
+  const [reviews, setReviews] = useState([])
+  const [promos, setPromos] = useState([])
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(emptyProduct)
+  const [promoForm, setPromoForm] = useState({
+    code: '',
+    description: '',
+    type: 'PERCENTAGE',
+    value: 10,
+    minOrderAmount: 0,
+    maxUses: 100,
+    perUserLimit: 1,
+    expiresAt: '',
+  })
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [editing, setEditing] = useState({})
+  const [trackingDraft, setTrackingDraft] = useState({})
 
   useEffect(() => {
     if (!authLoading && !isAdmin) navigate('/login')
@@ -43,16 +56,20 @@ export default function AdminPage() {
     setLoading(true)
     setError('')
     try {
-      const [s, p, o, u] = await Promise.all([
+      const [s, p, o, u, r, pr] = await Promise.all([
         api.adminStats(),
         api.adminProducts(),
         api.adminOrders(),
         api.adminUsers(),
+        api.adminReviews(),
+        api.adminPromos(),
       ])
       setStats(s.data.stats)
       setProducts(p.data.products || [])
       setOrders(o.data.orders || [])
       setUsers(u.data.users || [])
+      setReviews(r.data.reviews || [])
+      setPromos(pr.data.promos || [])
     } catch (err) {
       setError(err.message || 'Failed to load admin data')
     } finally {
@@ -116,6 +133,51 @@ export default function AdminPage() {
     await load()
   }
 
+  const saveTracking = async (id) => {
+    const draft = trackingDraft[id] || {}
+    try {
+      await api.adminUpdateOrderTracking(id, {
+        status: draft.status,
+        trackingNumber: draft.trackingNumber || undefined,
+        estimatedDelivery: draft.estimatedDelivery || undefined,
+        note: draft.note || undefined,
+      })
+      setMessage('Simulated tracking updated')
+      await load()
+    } catch (err) {
+      setError(err.message || 'Tracking update failed')
+    }
+  }
+
+  const createPromo = async (e) => {
+    e.preventDefault()
+    try {
+      await api.adminCreatePromo({
+        ...promoForm,
+        value: Number(promoForm.value),
+        minOrderAmount: Number(promoForm.minOrderAmount) || 0,
+        maxUses: promoForm.maxUses === '' ? null : Number(promoForm.maxUses),
+        perUserLimit: Number(promoForm.perUserLimit) || 1,
+        expiresAt: promoForm.expiresAt || null,
+      })
+      setPromoForm({
+        code: '',
+        description: '',
+        type: 'PERCENTAGE',
+        value: 10,
+        minOrderAmount: 0,
+        maxUses: 100,
+        perUserLimit: 1,
+        expiresAt: '',
+      })
+      setMessage('Promo created')
+      await load()
+      setTab('promos')
+    } catch (err) {
+      setError(err.message || 'Promo create failed')
+    }
+  }
+
   if (authLoading || loading) {
     return (
       <div className="flex justify-center py-24">
@@ -132,7 +194,7 @@ export default function AdminPage() {
       </p>
 
       <div className="flex flex-wrap gap-2 mb-8">
-        {['overview', 'products', 'orders', 'users', 'create'].map((t) => (
+        {['overview', 'products', 'orders', 'reviews', 'promos', 'users', 'create'].map((t) => (
           <button
             key={t}
             type="button"
@@ -261,40 +323,246 @@ export default function AdminPage() {
 
       {tab === 'orders' && (
         <div className="space-y-3">
-          {orders.map((order) => (
-            <div key={order.id} className="glass rounded-[16px] p-4">
-              <div className="flex flex-wrap justify-between gap-3 mb-3">
-                <div>
-                  <p className="font-semibold">{order.orderNumber || order.id.slice(0, 8)}</p>
-                  <p className="text-sm">{order.user?.email || order.userId}</p>
-                  <p className="text-xs text-muted">{formatDate(order.createdAt)}</p>
+          {orders.map((order) => {
+            const draft = trackingDraft[order.id] || {
+              status: order.status,
+              trackingNumber: order.trackingNumber || '',
+              estimatedDelivery: order.estimatedDelivery
+                ? String(order.estimatedDelivery).slice(0, 10)
+                : '',
+              note: '',
+            }
+            return (
+              <div key={order.id} className="glass rounded-[16px] p-4 space-y-3">
+                <div className="flex flex-wrap justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">{order.orderNumber || order.id.slice(0, 8)}</p>
+                    <p className="text-sm">{order.user?.email || order.userId}</p>
+                    <p className="text-xs text-muted">{formatDate(order.createdAt)}</p>
+                  </div>
+                  <p className="font-bold">{formatPrice(order.total)}</p>
                 </div>
-                <p className="font-bold">{formatPrice(order.total)}</p>
-              </div>
-              <ul className="mb-3 text-sm text-muted space-y-1">
-                {order.items?.map((item) => (
-                  <li key={item.id}>
-                    {item.product?.name || 'Product'} × {item.quantity}
-                  </li>
-                ))}
-              </ul>
-              <div className="flex flex-wrap gap-2 items-center">
-                <select
-                  value={order.status}
-                  onChange={(e) => updateStatus(order.id, e.target.value)}
-                  className="rounded-[12px] border border-silver/30 bg-transparent px-3 py-2 text-sm"
-                >
-                  {['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'].map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
+                <ul className="text-sm text-muted space-y-1">
+                  {order.items?.map((item) => (
+                    <li key={item.id}>
+                      {item.product?.name || 'Product'} × {item.quantity}
+                    </li>
                   ))}
-                </select>
-                <span className="text-xs text-volt">Demo order</span>
+                </ul>
+                <p className="text-xs text-volt">
+                  Simulated tracking — no real shipment. Quick status:{' '}
+                  <button type="button" className="underline" onClick={() => updateStatus(order.id, 'PROCESSING')}>
+                    Processing
+                  </button>
+                </p>
+                <div className="grid sm:grid-cols-2 gap-2">
+                  <select
+                    value={draft.status}
+                    onChange={(e) =>
+                      setTrackingDraft((prev) => ({
+                        ...prev,
+                        [order.id]: { ...draft, status: e.target.value },
+                      }))
+                    }
+                    className="rounded-[12px] border border-silver/30 bg-transparent px-3 py-2 text-sm"
+                  >
+                    {['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'].map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    placeholder="Tracking number"
+                    value={draft.trackingNumber}
+                    onChange={(e) =>
+                      setTrackingDraft((prev) => ({
+                        ...prev,
+                        [order.id]: { ...draft, trackingNumber: e.target.value },
+                      }))
+                    }
+                    className="rounded-[12px] border border-silver/30 bg-transparent px-3 py-2 text-sm"
+                  />
+                  <input
+                    type="date"
+                    value={draft.estimatedDelivery}
+                    onChange={(e) =>
+                      setTrackingDraft((prev) => ({
+                        ...prev,
+                        [order.id]: { ...draft, estimatedDelivery: e.target.value },
+                      }))
+                    }
+                    className="rounded-[12px] border border-silver/30 bg-transparent px-3 py-2 text-sm"
+                  />
+                  <input
+                    placeholder="Status note"
+                    value={draft.note}
+                    onChange={(e) =>
+                      setTrackingDraft((prev) => ({
+                        ...prev,
+                        [order.id]: { ...draft, note: e.target.value },
+                      }))
+                    }
+                    className="rounded-[12px] border border-silver/30 bg-transparent px-3 py-2 text-sm"
+                  />
+                </div>
+                <Button size="sm" onClick={() => saveTracking(order.id)}>
+                  Save simulated tracking
+                </Button>
+              </div>
+            )
+          })}
+          {!orders.length && <p className="text-muted">No demo orders yet.</p>}
+        </div>
+      )}
+
+      {tab === 'reviews' && (
+        <div className="space-y-3">
+          {reviews.map((review) => (
+            <div key={review.id} className="glass rounded-[16px] p-4 flex flex-wrap gap-3 justify-between">
+              <div className="min-w-0">
+                <p className="font-semibold">{review.product?.name || review.productId}</p>
+                <p className="text-sm text-muted">
+                  {review.user?.email || review.user?.name} · {review.rating}/5 · {review.status}
+                  {review.verified ? ' · Verified' : ''}
+                </p>
+                <p className="text-sm mt-1">{review.body}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {['APPROVED', 'PENDING', 'REJECTED'].map((status) => (
+                  <Button
+                    key={status}
+                    size="sm"
+                    variant={review.status === status ? 'primary' : 'ghost'}
+                    onClick={async () => {
+                      await api.adminModerateReview(review.id, status)
+                      await load()
+                    }}
+                  >
+                    {status}
+                  </Button>
+                ))}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={async () => {
+                    if (!confirm('Delete review?')) return
+                    await api.adminDeleteReview(review.id)
+                    await load()
+                  }}
+                >
+                  Delete
+                </Button>
               </div>
             </div>
           ))}
-          {!orders.length && <p className="text-muted">No demo orders yet.</p>}
+          {!reviews.length && <p className="text-muted">No reviews yet.</p>}
+        </div>
+      )}
+
+      {tab === 'promos' && (
+        <div className="grid lg:grid-cols-[1fr_320px] gap-6">
+          <div className="space-y-3">
+            {promos.map((promo) => (
+              <div key={promo.id} className="glass rounded-[16px] p-4 flex flex-wrap gap-3 justify-between">
+                <div>
+                  <p className="font-semibold">{promo.code}</p>
+                  <p className="text-sm text-muted">
+                    {promo.type === 'PERCENTAGE' ? `${promo.value}%` : formatPrice(promo.value)} · used{' '}
+                    {promo.usedCount}
+                    {promo.maxUses != null ? `/${promo.maxUses}` : ''} · min{' '}
+                    {formatPrice(promo.minOrderAmount)}
+                  </p>
+                  <p className="text-xs text-muted mt-1">
+                    {promo.active ? 'Active' : 'Inactive'}
+                    {promo.expiresAt ? ` · expires ${formatDate(promo.expiresAt)}` : ''}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="soft"
+                    onClick={async () => {
+                      await api.adminUpdatePromo(promo.id, { active: !promo.active })
+                      await load()
+                    }}
+                  >
+                    {promo.active ? 'Disable' : 'Enable'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={async () => {
+                      if (!confirm('Delete promo?')) return
+                      await api.adminDeletePromo(promo.id)
+                      await load()
+                    }}
+                  >
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {!promos.length && <p className="text-muted">No promo codes yet.</p>}
+          </div>
+          <form onSubmit={createPromo} className="glass rounded-[18px] p-4 space-y-3 h-fit">
+            <h2 className="font-display text-lg font-bold">Create promo</h2>
+            <input
+              required
+              placeholder="CODE"
+              value={promoForm.code}
+              onChange={(e) => setPromoForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))}
+              className="w-full rounded-[12px] border border-silver/30 bg-transparent px-3 py-2 text-sm"
+            />
+            <input
+              placeholder="Description"
+              value={promoForm.description}
+              onChange={(e) => setPromoForm((f) => ({ ...f, description: e.target.value }))}
+              className="w-full rounded-[12px] border border-silver/30 bg-transparent px-3 py-2 text-sm"
+            />
+            <select
+              value={promoForm.type}
+              onChange={(e) => setPromoForm((f) => ({ ...f, type: e.target.value }))}
+              className="w-full rounded-[12px] border border-silver/30 bg-transparent px-3 py-2 text-sm"
+            >
+              <option value="PERCENTAGE">Percentage</option>
+              <option value="FIXED">Fixed USD</option>
+            </select>
+            <input
+              type="number"
+              required
+              min="0.01"
+              step="0.01"
+              value={promoForm.value}
+              onChange={(e) => setPromoForm((f) => ({ ...f, value: e.target.value }))}
+              className="w-full rounded-[12px] border border-silver/30 bg-transparent px-3 py-2 text-sm"
+            />
+            <input
+              type="number"
+              min="0"
+              placeholder="Min order"
+              value={promoForm.minOrderAmount}
+              onChange={(e) => setPromoForm((f) => ({ ...f, minOrderAmount: e.target.value }))}
+              className="w-full rounded-[12px] border border-silver/30 bg-transparent px-3 py-2 text-sm"
+            />
+            <input
+              type="number"
+              min="1"
+              placeholder="Max uses"
+              value={promoForm.maxUses}
+              onChange={(e) => setPromoForm((f) => ({ ...f, maxUses: e.target.value }))}
+              className="w-full rounded-[12px] border border-silver/30 bg-transparent px-3 py-2 text-sm"
+            />
+            <input
+              type="date"
+              value={promoForm.expiresAt}
+              onChange={(e) => setPromoForm((f) => ({ ...f, expiresAt: e.target.value }))}
+              className="w-full rounded-[12px] border border-silver/30 bg-transparent px-3 py-2 text-sm"
+            />
+            <Button type="submit" className="w-full">
+              Create promo
+            </Button>
+          </form>
         </div>
       )}
 

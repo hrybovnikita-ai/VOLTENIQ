@@ -75,6 +75,15 @@ export const api = {
   getFavorites: () => request('get', '/favorites'),
   toggleFavorite: (productId) =>
     request('post', '/favorites/toggle', { data: { productId } }),
+  getReviews: (productId, params = {}) =>
+    request('get', `/products/${productId}/reviews`, { params: cleanParams(params) }),
+  createReview: (productId, body) =>
+    request('post', `/products/${productId}/reviews`, { data: body }),
+  updateReview: (productId, reviewId, body) =>
+    request('put', `/products/${productId}/reviews/${reviewId}`, { data: body }),
+  deleteReview: (productId, reviewId) =>
+    request('delete', `/products/${productId}/reviews/${reviewId}`),
+  validatePromo: (body) => request('post', '/promos/validate', { data: body }),
   adminStats: () => request('get', '/admin/stats'),
   adminProducts: (params = {}) =>
     request('get', '/admin/products', { params: cleanParams(params) }),
@@ -85,7 +94,18 @@ export const api = {
   adminOrders: () => request('get', '/admin/orders'),
   adminUpdateOrderStatus: (id, status) =>
     request('patch', `/admin/orders/${id}/status`, { data: { status } }),
+  adminUpdateOrderTracking: (id, body) =>
+    request('patch', `/admin/orders/${id}/tracking`, { data: body }),
   adminUsers: () => request('get', '/admin/users'),
+  adminReviews: (params = {}) =>
+    request('get', '/admin/reviews', { params: cleanParams(params) }),
+  adminModerateReview: (id, status) =>
+    request('patch', `/admin/reviews/${id}`, { data: { status } }),
+  adminDeleteReview: (id) => request('delete', `/admin/reviews/${id}`),
+  adminPromos: () => request('get', '/admin/promos'),
+  adminCreatePromo: (body) => request('post', '/admin/promos', { data: body }),
+  adminUpdatePromo: (id, body) => request('put', `/admin/promos/${id}`, { data: body }),
+  adminDeletePromo: (id) => request('delete', `/admin/promos/${id}`),
   getPriceAlerts: () => request('get', '/alerts'),
   getAlertNotifications: () => request('get', '/alerts/notifications'),
   getPriceHistory: (productId) => request('get', `/alerts/history/${productId}`),

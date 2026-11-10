@@ -15,3 +15,4 @@ backend/dist/
 __pycache__/
 *.pyc
 .ai/
+.vercel
