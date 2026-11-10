@@ -6,23 +6,10 @@ import Spinner from '../components/ui/Spinner'
 
 const AuthContext = createContext(null)
 
-function isSsoCallbackPath() {
-  return typeof window !== 'undefined' && window.location.pathname.startsWith('/sso-callback')
-}
 
 async function restoreCookieSession() {
-  try {
-    const { data } = await api.me()
-    return data.user || null
-  } catch (error) {
-    if (error.status === 401) return null
-    try {
-      const { data } = await api.session()
-      return data.user || null
-    } catch {
-      return null
-    }
-  }
+  const { data } = await api.session()
+  return data.user || null
 }
 
 function ClerkAuthProvider({ children }) {
@@ -41,7 +28,7 @@ function ClerkAuthProvider({ children }) {
   const syncClerkSession = useCallback(async () => {
     if (!clerk.isSignedIn) return null
     const token = await clerk.getToken()
-    if (!token) return null
+    if (!token) throw new Error('Google session expired. Please sign in again.')
     return saveSession(await api.clerkSession({ token }))
   }, [clerk.isSignedIn, clerk.getToken, saveSession])
 
@@ -51,16 +38,13 @@ function ClerkAuthProvider({ children }) {
     localStorage.removeItem('volteniq_token')
 
     async function bootstrap() {
-      if (!clerk.isLoaded) return
 
-      // Let <AuthenticateWithRedirectCallback /> mount and finish OAuth first.
-      if (isSsoCallbackPath() && !clerk.isSignedIn) return
+
+      // Restore the store cookie independently of the external OAuth SDK.
+
 
       try {
-        let nextUser = await restoreCookieSession()
-        if (!nextUser && clerk.isSignedIn) {
-          nextUser = await syncClerkSession()
-        }
+        const nextUser = await restoreCookieSession()
         if (active && version === revision.current) setUser(nextUser)
       } catch {
         if (active && version === revision.current) setUser(null)
@@ -73,7 +57,7 @@ function ClerkAuthProvider({ children }) {
     return () => {
       active = false
     }
-  }, [clerk.isLoaded, clerk.isSignedIn, syncClerkSession])
+  }, [])
 
   async function login(email, password) {
     return saveSession(await api.login({ email, password }))
@@ -88,15 +72,16 @@ function ClerkAuthProvider({ children }) {
     throw new Error('Email verification is handled by the store account flow')
   }
 
-  async function loginWithGoogle() {
+  async function loginWithGoogle(mode = 'signIn') {
+    if (clerk.isSignedIn) return syncClerkSession()
     if (!clerkSdk?.client) {
-      throw new Error('Google sign-in is not configured. Set VITE_CLERK_PUBLISHABLE_KEY.')
+      throw new Error('Google sign-in could not load. Retry in Safari or Chrome, or use email and password.')
     }
     try {
-      await clerkSdk.client.signIn.authenticateWithRedirect({
+      await clerkSdk.client[mode].authenticateWithRedirect({
         strategy: 'oauth_google',
         redirectUrl: `${window.location.origin}/sso-callback`,
-        redirectUrlComplete: `${window.location.origin}/`,
+        redirectUrlComplete: `${window.location.origin}/sso-callback?finish=1`,
       })
     } catch (error) {
       throw new Error(mapClerkError(error), { cause: error })
@@ -124,24 +109,11 @@ function ClerkAuthProvider({ children }) {
     return data.user
   }
 
-  // Block the whole app only until Clerk JS is ready (avoids auth button flash).
-  // SSO callback must still render so the Clerk redirect handler can run.
-  if (!clerk.isLoaded) {
-    return (
-      <div role="status" className="flex min-h-screen flex-col items-center justify-center gap-3 bg-snow text-ink dark:bg-ink dark:text-snow">
-        <Spinner />
-        <p className="text-sm text-muted">Checking your session…</p>
-      </div>
-    )
-  }
-
-  const restoring = loading || (isSsoCallbackPath() && !user)
-
   return (
     <AuthContext.Provider
       value={{
         user,
-        loading: restoring,
+        loading,
         isAuthenticated: Boolean(user),
         isAdmin: user?.role === 'ADMIN',
         clerkEnabled: true,

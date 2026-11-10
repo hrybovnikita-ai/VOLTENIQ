@@ -17,7 +17,7 @@ export async function verifyClerkSessionToken(token) {
 
   let payload;
   try {
-    payload = await verifyToken(token, { secretKey: config.clerkSecretKey });
+    payload = await verifyToken(token, { secretKey: config.clerkSecretKey, authorizedParties: config.corsOrigin });
   } catch {
     const err = new Error('Invalid or expired Clerk session');
     err.status = 401;

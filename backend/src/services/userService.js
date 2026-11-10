@@ -115,7 +115,7 @@ export async function findOrCreateClerkUser({
 
     // Verified Google/Clerk email may link to the existing store row (no duplicate).
     const updated = await prisma.user.update({
-      where: { id: existingByEmail.id },
+      where: { id: existingByEmail.id, OR: [{ clerkId: null }, { clerkId }] },
       data: {
         clerkId,
         ...(googleId && !existingByEmail.googleId ? { googleId } : {}),
@@ -126,14 +126,14 @@ export async function findOrCreateClerkUser({
     return sanitize(updated);
   }
 
-  return createUser({
-    name: name || email.split('@')[0],
-    email,
-    password: null,
-    clerkId,
-    googleId,
-    avatarUrl,
-  });
+  try {
+    return await createUser({ name: name || email.split('@')[0], email, password: null, clerkId, googleId, avatarUrl });
+  } catch (error) {
+    if (error.status !== 409) throw error;
+    const concurrent = await findUserByClerkId(clerkId);
+    if (concurrent?.email.toLowerCase() === email.toLowerCase()) return sanitize(concurrent);
+    throw error;
+  }
 }
 
 export async function findOrCreateFirebaseUser({

@@ -22,6 +22,12 @@ function GoogleGlyph({ className = 'w-5 h-5' }) {
 }
 
 export default function GoogleSignInButton({ onClick, disabled, label = 'Continue with Google' }) {
+  const embedded = /Telegram|FBAN|FBAV|Instagram|; wv\)/i.test(navigator.userAgent) ||
+    Boolean(window.TelegramWebviewProxy || window.Telegram?.WebApp?.initData || /tgWebAppPlatform/i.test(location.hash))
+  if (embedded) return <div className="rounded-xl border border-silver/30 p-4 text-sm" role="note">
+    <strong>Open in Safari or Chrome to continue with Google</strong>
+    <p>Use this browser's menu and choose Open in Browser, or sign in with email here.</p>
+  </div>
   return (
     <button
       type="button"
