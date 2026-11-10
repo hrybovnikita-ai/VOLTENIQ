@@ -95,6 +95,8 @@ router.post(
       clerkId: claims.clerkId,
       email: claims.email,
       name: claims.name || nameFromEmail(claims.email),
+      emailVerified: claims.emailVerified,
+      googleId: claims.googleId,
     });
     await startSession(req, res, user.id);
     res.json({

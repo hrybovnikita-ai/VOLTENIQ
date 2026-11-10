@@ -22,6 +22,8 @@ export async function authenticate(req, res, next) {
         clerkId: claims.clerkId,
         email: claims.email,
         name: claims.name,
+        emailVerified: claims.emailVerified,
+        googleId: claims.googleId,
       });
       await startSession(req, res, user.id);
       req.user = user;

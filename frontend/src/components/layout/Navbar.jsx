@@ -24,16 +24,27 @@ const links = [
   { to: '/assistant', label: 'AI Assistant' },
 ]
 
+function displayName(user) {
+  if (!user) return ''
+  if (user.name?.trim()) return user.name.trim()
+  return String(user.email || '').split('@')[0]
+}
+
+function initials(user) {
+  const name = displayName(user)
+  return (name || 'U').slice(0, 1).toUpperCase()
+}
+
 export default function Navbar() {
   const [open, setOpen] = useState(false)
   const { theme, toggleTheme } = useTheme()
   const { count } = useCart()
   const { ids: favIds } = useFavorites()
   const { ids: compareIds } = useCompare()
-  const { user, isAdmin, logout } = useAuth()
+  const { user, isAdmin, logout, loading: authLoading } = useAuth()
 
   useEffect(() => {
-    const escape = event => {
+    const escape = (event) => {
       if (event.key === 'Escape' && open) {
         setOpen(false)
         document.querySelector('[aria-controls="mobile-nav"]')?.focus()
@@ -64,6 +75,10 @@ export default function Navbar() {
     'items-center justify-center rounded-[12px] p-2.5 min-h-11 min-w-11 border border-transparent hover:border-silver/20 hover:bg-white/30 dark:hover:bg-white/5 transition'
 
   const close = () => setOpen(false)
+  const closeDetails = (event) => {
+    const details = event.currentTarget.closest('details')
+    if (details) details.open = false
+  }
 
   return (
     <header className="sticky top-0 z-50">
@@ -141,19 +156,52 @@ export default function Navbar() {
                 </Link>
               )}
 
-              {user ? (
-                <details className="relative" onBlur={e => {
-                  if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.open = false
-                }}>
-                  <summary aria-label="Account menu" className="grid h-10 w-10 cursor-pointer list-none place-items-center rounded-full bg-graphite text-sm font-bold text-volt [&::-webkit-details-marker]:hidden">
-                    {(user.name || user.email).slice(0, 1).toUpperCase()}
+              {authLoading ? (
+                <div
+                  className="hidden sm:block h-10 w-24 animate-pulse rounded-[12px] bg-silver/15"
+                  aria-hidden="true"
+                />
+              ) : user ? (
+                <details
+                  className="relative"
+                  onBlur={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.open = false
+                  }}
+                >
+                  <summary
+                    aria-label="Account menu"
+                    className="flex cursor-pointer list-none items-center gap-2 rounded-full border border-silver/15 bg-graphite/90 py-1 pl-1 pr-2.5 text-volt [&::-webkit-details-marker]:hidden"
+                  >
+                    <span className="grid h-8 w-8 place-items-center rounded-full bg-ink text-sm font-bold text-volt">
+                      {initials(user)}
+                    </span>
+                    <span className="hidden max-w-[7.5rem] truncate text-xs font-semibold text-snow/90 lg:inline">
+                      {displayName(user)}
+                    </span>
                   </summary>
-                  <div className="glass-menu absolute right-0 top-12 z-50 w-52 p-2">
-                    <p className="truncate px-2 pb-2 text-xs text-muted">{user.email}</p>
-                    {[['Profile', '/profile'], ['Orders', '/profile#orders'], ['Settings', '/profile#settings']].map(([label, to]) => (
-                      <Link key={label} to={to} className="block rounded-lg p-2 hover:bg-volt/10 hover:text-volt" onClick={e => { e.currentTarget.closest('details').open = false }}>{label}</Link>
-                    ))}
-                    <button type="button" className="w-full rounded-lg p-2 text-left hover:bg-volt/10 hover:text-volt" onClick={() => { logout() }}>Log Out</button>
+                  <div className="glass-menu absolute right-0 top-12 z-50 w-56 p-2">
+                    <div className="border-b border-silver/15 px-2 pb-2 mb-1">
+                      <p className="truncate text-sm font-semibold text-snow">{displayName(user)}</p>
+                      <p className="truncate text-xs text-muted">{user.email}</p>
+                    </div>
+                    <Link to="/profile" className="block rounded-lg p-2 hover:bg-volt/10 hover:text-volt" onClick={closeDetails}>
+                      My Profile
+                    </Link>
+                    <Link to="/profile#orders" className="block rounded-lg p-2 hover:bg-volt/10 hover:text-volt" onClick={closeDetails}>
+                      My Orders
+                    </Link>
+                    <Link to="/profile#settings" className="block rounded-lg p-2 hover:bg-volt/10 hover:text-volt" onClick={closeDetails}>
+                      Settings
+                    </Link>
+                    <button
+                      type="button"
+                      className="w-full rounded-lg p-2 text-left hover:bg-volt/10 hover:text-volt"
+                      onClick={() => {
+                        logout()
+                      }}
+                    >
+                      Sign Out
+                    </button>
                   </div>
                 </details>
               ) : (
@@ -215,13 +263,19 @@ export default function Navbar() {
                   <NavLink to="/cart" className={linkClass} onClick={close}>
                     Bag
                   </NavLink>
-                  {user ? (
+                  {authLoading ? (
+                    <div className="h-11 rounded-lg bg-silver/15 animate-pulse" aria-hidden="true" />
+                  ) : user ? (
                     <>
+                      <div className="px-1 py-2">
+                        <p className="text-sm font-semibold">{displayName(user)}</p>
+                        <p className="text-xs text-muted truncate">{user.email}</p>
+                      </div>
                       <NavLink to="/profile" className={linkClass} onClick={close}>
-                        Profile
+                        My Profile
                       </NavLink>
                       <NavLink to="/profile#orders" className={linkClass} onClick={close}>
-                        Orders
+                        My Orders
                       </NavLink>
                       <NavLink to="/profile#settings" className={linkClass} onClick={close}>
                         Settings
@@ -251,7 +305,7 @@ export default function Navbar() {
                         close()
                       }}
                     >
-                      Log Out
+                      Sign Out
                     </button>
                   )}
                 </nav>

@@ -9,15 +9,13 @@ import Button from '../components/ui/Button'
 const inputClass = 'auth-input'
 
 export default function SignupPage() {
-  const { register, verifyEmailCode, loginWithGoogle, isAuthenticated } = useAuth()
+  const { register, loginWithGoogle, isAuthenticated, clerkEnabled } = useAuth()
   const location = useLocation()
   const [form, setForm] = useState({
     email: '',
     password: '',
     confirmPassword: '',
   })
-  const [code, setCode] = useState('')
-  const [needsVerification, setNeedsVerification] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -39,12 +37,11 @@ export default function SignupPage() {
     }
     setLoading(true)
     try {
-      const result = await register({
+      await register({
         email: form.email.trim(),
         password: form.password,
         confirmPassword: form.confirmPassword,
       })
-      if (result?.needsVerification) setNeedsVerification(true)
     } catch (err) {
       setError(err.message || 'Sign up failed')
     } finally {
@@ -52,27 +49,10 @@ export default function SignupPage() {
     }
   }
 
-  const onVerify = async (e) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-    try {
-      await verifyEmailCode(code.trim())
-    } catch (err) {
-      setError(err.message || 'Verification failed')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   return (
     <AuthLayout
-      title={needsVerification ? 'Verify Email' : 'Create Account'}
-      subtitle={
-        needsVerification
-          ? 'Enter the code Clerk sent to your email.'
-          : 'Sign up to continue to checkout.'
-      }
+      title="Create Account"
+      subtitle="Sign up to continue to checkout."
       footer={
         <p className="text-sm text-silver/70">
           Already have an account?{' '}
@@ -86,95 +66,72 @@ export default function SignupPage() {
         </p>
       }
     >
-      {needsVerification ? (
-        <form onSubmit={onVerify} className="space-y-4">
-          <div>
-            <label htmlFor="signup-code" className="block text-sm font-medium text-snow/90 mb-1.5">
-              Verification code
-            </label>
-            <input
-              id="signup-code"
-              type="text"
-              required
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              className={inputClass}
-              placeholder="123456"
-            />
-          </div>
-          {error ? <p role="alert" className="text-sm text-red-400">{error}</p> : null}
-          <Button type="submit" className="w-full rounded-[16px]" size="lg" disabled={loading}>
-            {loading ? 'Verifying...' : 'Verify and continue'}
-          </Button>
-        </form>
-      ) : (
-        <>
-          <form onSubmit={onSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="signup-email" className="block text-sm font-medium text-snow/90 mb-1.5">
-                Email
-              </label>
-              <input
-                id="signup-email"
-                type="email"
-                required
-                autoComplete="email"
-                value={form.email}
-                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                className={inputClass}
-                placeholder="you@example.com"
-              />
-            </div>
-
-            <AuthPasswordField
-              id="signup-password"
-              label="Password"
-              value={form.password}
-              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-              autoComplete="new-password"
-              placeholder="At least 6 characters"
-              minLength={6}
-            />
-
-            <AuthPasswordField
-              id="signup-confirm"
-              label="Confirm Password"
-              value={form.confirmPassword}
-              onChange={(e) => setForm((f) => ({ ...f, confirmPassword: e.target.value }))}
-              autoComplete="new-password"
-              placeholder="Repeat your password"
-              minLength={6}
-            />
-
-            {error ? <p role="alert" className="text-sm text-red-400">{error}</p> : null}
-
-            <Button type="submit" className="w-full rounded-[16px]" size="lg" disabled={loading}>
-              {loading ? 'Creating account...' : 'Create Account'}
-            </Button>
-          </form>
-
-          <div className="flex items-center gap-3 my-5">
-            <div className="h-px flex-1 bg-silver/20" />
-            <span className="text-[11px] uppercase tracking-[0.18em] text-muted">or</span>
-            <div className="h-px flex-1 bg-silver/20" />
-          </div>
-
-          <GoogleSignInButton
-            disabled={loading}
-            onClick={async () => {
-              setLoading(true)
-              setError('')
-              try {
-                await loginWithGoogle()
-              } catch (err) {
-                setError(err.message || 'Google sign-in failed')
-                setLoading(false)
-              }
-            }}
+      <form onSubmit={onSubmit} className="space-y-4">
+        <div>
+          <label htmlFor="signup-email" className="block text-sm font-medium text-snow/90 mb-1.5">
+            Email
+          </label>
+          <input
+            id="signup-email"
+            type="email"
+            required
+            autoComplete="email"
+            value={form.email}
+            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            className={inputClass}
+            placeholder="you@example.com"
           />
-        </>
+        </div>
+
+        <AuthPasswordField
+          id="signup-password"
+          label="Password"
+          value={form.password}
+          onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+          autoComplete="new-password"
+          placeholder="At least 6 characters"
+          minLength={6}
+        />
+
+        <AuthPasswordField
+          id="signup-confirm"
+          label="Confirm Password"
+          value={form.confirmPassword}
+          onChange={(e) => setForm((f) => ({ ...f, confirmPassword: e.target.value }))}
+          autoComplete="new-password"
+          placeholder="Repeat your password"
+          minLength={6}
+        />
+
+        {error ? <p role="alert" className="text-sm text-red-400">{error}</p> : null}
+
+        <Button type="submit" className="w-full rounded-[16px]" size="lg" disabled={loading}>
+          {loading ? 'Creating account...' : 'Create Account'}
+        </Button>
+      </form>
+
+      <div className="flex items-center gap-3 my-5">
+        <div className="h-px flex-1 bg-silver/20" />
+        <span className="text-[11px] uppercase tracking-[0.18em] text-muted">or</span>
+        <div className="h-px flex-1 bg-silver/20" />
+      </div>
+
+      {clerkEnabled ? (
+        <GoogleSignInButton
+          disabled={loading}
+          onClick={async () => {
+            setLoading(true)
+            setError('')
+            try {
+              await loginWithGoogle()
+            } catch (err) {
+              setError(err.message || 'Google sign-in failed')
+              setLoading(false)
+            }
+          }}
+        />
+      ) : (
+        <p className="text-sm text-muted text-center">Google sign-in requires Clerk configuration.</p>
       )}
     </AuthLayout>
   )

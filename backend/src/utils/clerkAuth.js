@@ -35,19 +35,36 @@ export async function verifyClerkSessionToken(token) {
   const clerkUser = await client.users.getUser(clerkId);
   const primary = clerkUser.emailAddresses?.find(
     (entry) => entry.id === clerkUser.primaryEmailAddressId
-  );
-  const email = primary?.emailAddress || clerkUser.emailAddresses?.[0]?.emailAddress;
+  ) || clerkUser.emailAddresses?.[0];
+
+  const email = primary?.emailAddress;
   if (!email) {
     const err = new Error('Clerk account email is required');
     err.status = 400;
     throw err;
   }
 
+  const emailVerified = primary?.verification?.status === 'verified'
+    || Boolean(clerkUser.externalAccounts?.some((account) => (
+      account.provider === 'oauth_google'
+      && account.verification?.status === 'verified'
+      && account.emailAddress?.toLowerCase() === email.toLowerCase()
+    )));
+
+  if (!emailVerified) {
+    const err = new Error('Verify your email with Google/Clerk before continuing');
+    err.status = 401;
+    throw err;
+  }
+
   const name = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(' ').trim();
+  const googleAccount = clerkUser.externalAccounts?.find((account) => account.provider === 'oauth_google');
 
   return {
     clerkId,
     email,
+    emailVerified: true,
     name: name || null,
+    googleId: googleAccount?.providerUserId || null,
   };
 }

@@ -21,10 +21,21 @@ test('Clerk sync links existing email accounts and rejects conflicting clerkIds'
     name: 'Existing Member',
   });
 
+  await assert.rejects(
+    () => findOrCreateClerkUser({
+      clerkId: clerkIdA,
+      email,
+      name: 'Existing Member',
+      emailVerified: false,
+    }),
+    (error) => error.status === 401
+  );
+
   const linked = await findOrCreateClerkUser({
     clerkId: clerkIdA,
     email,
     name: 'Existing Member',
+    emailVerified: true,
   });
   assert.equal(linked.id, created.id);
   assert.equal(linked.email, email);
@@ -36,11 +47,17 @@ test('Clerk sync links existing email accounts and rejects conflicting clerkIds'
     clerkId: clerkIdA,
     email,
     name: 'Existing Member',
+    emailVerified: true,
   });
   assert.equal(again.id, created.id);
 
   await assert.rejects(
-    () => findOrCreateClerkUser({ clerkId: clerkIdB, email, name: 'Other' }),
+    () => findOrCreateClerkUser({
+      clerkId: clerkIdB,
+      email,
+      name: 'Other',
+      emailVerified: true,
+    }),
     (error) => error.status === 409
   );
 

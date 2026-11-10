@@ -62,11 +62,23 @@ export async function createUser({
 /**
  * Link a verified Clerk identity to an existing Prisma user by email, or create one.
  * Never deletes users and never creates a second row for the same email.
+ * Requires a verified email from Clerk to prevent account takeover.
  */
-export async function findOrCreateClerkUser({ clerkId, email, name }) {
+export async function findOrCreateClerkUser({
+  clerkId,
+  email,
+  name,
+  emailVerified = false,
+  googleId = null,
+}) {
   if (!clerkId || !email) {
     const err = new Error('Clerk account email is required');
     err.status = 400;
+    throw err;
+  }
+  if (!emailVerified) {
+    const err = new Error('Verify your email with Google/Clerk before continuing');
+    err.status = 401;
     throw err;
   }
 
@@ -77,10 +89,13 @@ export async function findOrCreateClerkUser({ clerkId, email, name }) {
       err.status = 409;
       throw err;
     }
-    if (name && name !== existingByClerk.name) {
+    const patch = {};
+    if (name && !existingByClerk.name) patch.name = name;
+    if (googleId && !existingByClerk.googleId) patch.googleId = googleId;
+    if (Object.keys(patch).length) {
       const updated = await prisma.user.update({
         where: { id: existingByClerk.id },
-        data: { name },
+        data: patch,
       });
       return sanitize(updated);
     }
@@ -95,11 +110,13 @@ export async function findOrCreateClerkUser({ clerkId, email, name }) {
       throw err;
     }
 
+    // Verified Google/Clerk email may link to the existing store row (no duplicate).
     const updated = await prisma.user.update({
       where: { id: existingByEmail.id },
       data: {
         clerkId,
-        ...(name ? { name } : {}),
+        ...(googleId && !existingByEmail.googleId ? { googleId } : {}),
+        ...(name && !existingByEmail.name ? { name } : {}),
       },
     });
     return sanitize(updated);
@@ -110,6 +127,7 @@ export async function findOrCreateClerkUser({ clerkId, email, name }) {
     email,
     password: null,
     clerkId,
+    googleId,
   });
 }
 

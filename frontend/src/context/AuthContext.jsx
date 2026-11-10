@@ -1,25 +1,31 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useAuth as useClerkAuth, useClerk } from '@clerk/react'
 import { api } from '../api/client'
-import { clerkErrorCodes, isClerkEnabled, mapClerkError } from '../lib/clerk'
+import { isClerkEnabled, mapClerkError } from '../lib/clerk'
 import Spinner from '../components/ui/Spinner'
 
 const AuthContext = createContext(null)
 
-async function googleSessionFirebase() {
-  const { auth, googleProvider, mapFirebaseAuthError } = await import('../lib/firebase')
-  const { signInWithPopup, signOut } = await import('firebase/auth')
+function isSsoCallbackPath() {
+  return typeof window !== 'undefined' && window.location.pathname.startsWith('/sso-callback')
+}
+
+async function restoreCookieSession() {
   try {
-    const { user } = await signInWithPopup(auth, googleProvider)
-    return await api.firebaseSession({ idToken: await user.getIdToken() })
+    const { data } = await api.me()
+    return data.user || null
   } catch (error) {
-    throw new Error(mapFirebaseAuthError(error), { cause: error })
-  } finally {
-    await signOut(auth)
+    if (error.status === 401) return null
+    try {
+      const { data } = await api.session()
+      return data.user || null
+    } catch {
+      return null
+    }
   }
 }
 
-function SessionBootstrap({ children }) {
+function ClerkAuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const revision = useRef(0)
@@ -37,7 +43,7 @@ function SessionBootstrap({ children }) {
     const token = await clerk.getToken()
     if (!token) return null
     return saveSession(await api.clerkSession({ token }))
-  }, [clerk, saveSession])
+  }, [clerk.isSignedIn, clerk.getToken, saveSession])
 
   useEffect(() => {
     const version = revision.current
@@ -45,18 +51,21 @@ function SessionBootstrap({ children }) {
     localStorage.removeItem('volteniq_token')
 
     async function bootstrap() {
+      if (!clerk.isLoaded) return
+
+      // Let <AuthenticateWithRedirectCallback /> mount and finish OAuth first.
+      if (isSsoCallbackPath() && !clerk.isSignedIn) return
+
       try {
-        if (!clerk.isLoaded) return
-        if (clerk.isSignedIn) {
-          const synced = await syncClerkSession()
-          if (active && version === revision.current && synced) return
+        let nextUser = await restoreCookieSession()
+        if (!nextUser && clerk.isSignedIn) {
+          nextUser = await syncClerkSession()
         }
-        const { data } = await api.session()
-        if (active && version === revision.current) setUser(data.user)
+        if (active && version === revision.current) setUser(nextUser)
       } catch {
         if (active && version === revision.current) setUser(null)
       } finally {
-        if (active && clerk.isLoaded) setLoading(false)
+        if (active) setLoading(false)
       }
     }
 
@@ -67,72 +76,31 @@ function SessionBootstrap({ children }) {
   }, [clerk.isLoaded, clerk.isSignedIn, syncClerkSession])
 
   async function login(email, password) {
-    try {
-      const signIn = await clerkSdk.client.signIn.create({
-        identifier: email,
-        password,
-      })
-      if (signIn.status === 'complete') {
-        await clerkSdk.setActive({ session: signIn.createdSessionId })
-        return syncClerkSession()
-      }
-      throw new Error('Additional verification is required to finish signing in.')
-    } catch (error) {
-      const codes = clerkErrorCodes(error)
-      const canFallback =
-        codes.includes('form_identifier_not_found') ||
-        codes.includes('form_password_incorrect') ||
-        codes.includes('strategy_for_user_invalid')
-      if (!canFallback && !error.status) {
-        throw new Error(mapClerkError(error), { cause: error })
-      }
-    }
-
     return saveSession(await api.login({ email, password }))
   }
 
   async function register({ email, password }) {
-    try {
-      const signUp = await clerkSdk.client.signUp.create({
-        emailAddress: email,
-        password,
-      })
-
-      if (signUp.status === 'complete') {
-        await clerkSdk.setActive({ session: signUp.createdSessionId })
-        return { user: await syncClerkSession(), needsVerification: false }
-      }
-
-      if (signUp.unverifiedFields?.includes('email_address')) {
-        await signUp.prepareEmailAddressVerification({ strategy: 'email_code' })
-        return { user: null, needsVerification: true }
-      }
-
-      throw new Error('Additional verification is required to finish creating your account.')
-    } catch (error) {
-      const codes = clerkErrorCodes(error)
-      if (codes.includes('form_identifier_exists')) {
-        return { user: await login(email, password), needsVerification: false }
-      }
-      throw new Error(mapClerkError(error), { cause: error })
-    }
+    const nextUser = saveSession(await api.register({ email, password }))
+    return { user: nextUser, needsVerification: false }
   }
 
-  async function verifyEmailCode(code) {
-    const result = await clerkSdk.client.signUp.attemptEmailAddressVerification({ code })
-    if (result.status !== 'complete') {
-      throw new Error('Invalid verification code')
-    }
-    await clerkSdk.setActive({ session: result.createdSessionId })
-    return syncClerkSession()
+  async function verifyEmailCode() {
+    throw new Error('Email verification is handled by the store account flow')
   }
 
   async function loginWithGoogle() {
-    await clerkSdk.client.signIn.authenticateWithRedirect({
-      strategy: 'oauth_google',
-      redirectUrl: `${window.location.origin}/sso-callback`,
-      redirectUrlComplete: `${window.location.origin}/`,
-    })
+    if (!clerkSdk?.client) {
+      throw new Error('Google sign-in is not configured. Set VITE_CLERK_PUBLISHABLE_KEY.')
+    }
+    try {
+      await clerkSdk.client.signIn.authenticateWithRedirect({
+        strategy: 'oauth_google',
+        redirectUrl: `${window.location.origin}/sso-callback`,
+        redirectUrlComplete: `${window.location.origin}/`,
+      })
+    } catch (error) {
+      throw new Error(mapClerkError(error), { cause: error })
+    }
     return null
   }
 
@@ -142,7 +110,7 @@ function SessionBootstrap({ children }) {
       await api.logout()
     } finally {
       try {
-        await clerkSdk.signOut({ redirectUrl: window.location.origin })
+        if (clerk.isSignedIn) await clerkSdk.signOut({ redirectUrl: window.location.origin })
       } catch {
         // Cookie session already cleared.
       }
@@ -156,7 +124,9 @@ function SessionBootstrap({ children }) {
     return data.user
   }
 
-  if (loading || !clerk.isLoaded) {
+  // Block the whole app only until Clerk JS is ready (avoids auth button flash).
+  // SSO callback must still render so the Clerk redirect handler can run.
+  if (!clerk.isLoaded) {
     return (
       <div role="status" className="flex min-h-screen flex-col items-center justify-center gap-3 bg-snow text-ink dark:bg-ink dark:text-snow">
         <Spinner />
@@ -165,11 +135,13 @@ function SessionBootstrap({ children }) {
     )
   }
 
+  const restoring = loading || (isSsoCallbackPath() && !user)
+
   return (
     <AuthContext.Provider
       value={{
         user,
-        loading,
+        loading: restoring,
         isAuthenticated: Boolean(user),
         isAdmin: user?.role === 'ADMIN',
         clerkEnabled: true,
@@ -196,17 +168,15 @@ function LegacyAuthProvider({ children }) {
     const version = revision.current
     let active = true
     localStorage.removeItem('volteniq_token')
-    api
-      .session()
-      .then(({ data }) => {
-        if (active && version === revision.current) setUser(data.user)
-      })
-      .catch(() => {
-        if (active && version === revision.current) setUser(null)
+
+    restoreCookieSession()
+      .then((nextUser) => {
+        if (active && version === revision.current) setUser(nextUser)
       })
       .finally(() => {
         if (active) setLoading(false)
       })
+
     return () => {
       active = false
     }
@@ -231,7 +201,7 @@ function LegacyAuthProvider({ children }) {
     <AuthContext.Provider
       value={{
         user,
-        loading,
+        loading: false,
         isAuthenticated: Boolean(user),
         isAdmin: user?.role === 'ADMIN',
         clerkEnabled: false,
@@ -243,7 +213,9 @@ function LegacyAuthProvider({ children }) {
         verifyEmailCode: async () => {
           throw new Error('Email verification is unavailable')
         },
-        loginWithGoogle: async () => saveSession(await googleSessionFirebase()),
+        loginWithGoogle: async () => {
+          throw new Error('Google sign-in requires Clerk. Set VITE_CLERK_PUBLISHABLE_KEY and redeploy.')
+        },
         logout: async () => {
           revision.current += 1
           try {
@@ -266,7 +238,7 @@ function LegacyAuthProvider({ children }) {
 }
 
 export function AuthProvider({ children }) {
-  if (isClerkEnabled) return <SessionBootstrap>{children}</SessionBootstrap>
+  if (isClerkEnabled) return <ClerkAuthProvider>{children}</ClerkAuthProvider>
   return <LegacyAuthProvider>{children}</LegacyAuthProvider>
 }
 

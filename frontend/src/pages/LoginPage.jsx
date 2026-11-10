@@ -9,10 +9,10 @@ import Button from '../components/ui/Button'
 const inputClass = 'auth-input'
 
 export default function LoginPage() {
-  const { login, loginWithGoogle, isAuthenticated } = useAuth()
+  const { login, loginWithGoogle, isAuthenticated, clerkEnabled } = useAuth()
   const location = useLocation()
   const [form, setForm] = useState({ email: '', password: '' })
-  const [error, setError] = useState('')
+  const [error, setError] = useState(location.state?.oauthError || '')
   const [loading, setLoading] = useState(false)
 
   if (isAuthenticated) {
@@ -91,19 +91,23 @@ export default function LoginPage() {
         <div className="h-px flex-1 bg-silver/20" />
       </div>
 
-      <GoogleSignInButton
-        disabled={loading}
-        onClick={async () => {
-          setLoading(true)
-          setError('')
-          try {
-            await loginWithGoogle()
-          } catch (err) {
-            setError(err.message || 'Google sign-in failed')
-            setLoading(false)
-          }
-        }}
-      />
+      {clerkEnabled ? (
+        <GoogleSignInButton
+          disabled={loading}
+          onClick={async () => {
+            setLoading(true)
+            setError('')
+            try {
+              await loginWithGoogle()
+            } catch (err) {
+              setError(err.message || 'Google sign-in failed')
+              setLoading(false)
+            }
+          }}
+        />
+      ) : (
+        <p className="text-sm text-muted text-center">Google sign-in requires Clerk configuration.</p>
+      )}
     </AuthLayout>
   )
 }

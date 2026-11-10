@@ -9,6 +9,7 @@ import orderRoutes from './routes/orders.js';
 import favoriteRoutes from './routes/favorites.js';
 import adminRoutes from './routes/admin.js';
 import alertRoutes from './routes/alerts.js';
+import assistantRoutes from './routes/assistant.js';
 import chatRoutes from './routes/chats.js';
 
 const app = express();
@@ -26,6 +27,8 @@ app.use(
       return callback(Object.assign(new Error('Origin is not allowed'), { status: 403 }));
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
 app.use(express.json({ limit: '1mb' }));
@@ -33,6 +36,7 @@ app.use(express.json({ limit: '1mb' }));
 app.get('/api/health', (req, res) => {
   res.json({
     success: true,
+    status: 'online',
     service: 'VOLTENIQ API',
     demoMode: config.demoMode,
     timestamp: new Date().toISOString(),
@@ -45,6 +49,7 @@ app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/favorites', favoriteRoutes);
 app.use('/api/alerts', alertRoutes);
+app.use('/api/assistant', assistantRoutes);
 app.use('/api/chats', chatRoutes);
 app.use('/api/admin', adminRoutes);
 
