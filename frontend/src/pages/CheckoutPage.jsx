@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, CreditCard, ShieldCheck, Tag, Wallet } from 'lucide-react'
+import { rememberPurchase } from '../utils/purchaseReceipt'
 import { useCart } from '../context/CartContext'
 import { api } from '../api/client'
 import { clearPurchaseIntent, loadPurchaseIntent } from '../utils/purchaseIntent'
@@ -173,6 +174,7 @@ export default function CheckoutPage() {
     setError('')
     try {
       const { data } = await api.createOrder(payload)
+      rememberPurchase(data.order)
       clearPurchaseIntent()
       if (!buyNow) clearCart()
       navigate('/order/success?id=' + encodeURIComponent(data.order.id), { replace: true })

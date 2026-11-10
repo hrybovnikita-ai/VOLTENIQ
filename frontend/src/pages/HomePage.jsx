@@ -14,6 +14,7 @@ import {
 import { api } from '../api/client'
 import { useApi } from '../hooks/useApi'
 import ProductCard from '../components/products/ProductCard'
+import PurchaseReceipt from '../components/home/PurchaseReceipt'
 import FeaturedShowcase from '../components/home/FeaturedShowcase'
 import Button from '../components/ui/Button'
 import Spinner from '../components/ui/Spinner'
@@ -43,6 +44,7 @@ export default function HomePage() {
 
   return (
     <div className="w-full min-w-0">
+      <PurchaseReceipt />
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 hero-grid pointer-events-none" />
         <div className="hero-glow" aria-hidden="true" />
