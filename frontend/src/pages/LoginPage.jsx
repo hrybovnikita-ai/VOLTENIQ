@@ -5,6 +5,7 @@ import AuthLayout from '../components/auth/AuthLayout'
 import AuthPasswordField from '../components/auth/AuthPasswordField'
 import GoogleSignInButton from '../components/auth/GoogleSignInButton'
 import Button from '../components/ui/Button'
+import { safeRedirectPath } from '../utils/safeRedirect'
 
 const inputClass = 'auth-input'
 
@@ -16,7 +17,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
 
   if (isAuthenticated) {
-    const dest = location.state?.from || '/'
+    const dest = safeRedirectPath(location.state?.from, '/')
     return <Navigate to={dest} replace />
   }
 

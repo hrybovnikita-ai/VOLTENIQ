@@ -17,6 +17,7 @@ export default function ProfilePage() {
   const [name, setName] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
   const [password, setPassword] = useState('')
+  const [currentPassword, setCurrentPassword] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [params] = useSearchParams()
@@ -67,13 +68,22 @@ export default function ProfilePage() {
     e.preventDefault()
     setMessage('')
     setError('')
+    if (password && password.length < 8) {
+      setError('New password must be at least 8 characters')
+      return
+    }
+    if (password && !currentPassword) {
+      setError('Enter your current password to set a new one')
+      return
+    }
     try {
       await updateProfile({
         name,
         avatarUrl: avatarUrl.trim() || null,
-        ...(password ? { password } : {}),
+        ...(password ? { password, currentPassword } : {}),
       })
       setPassword('')
+      setCurrentPassword('')
       setMessage('Profile updated')
     } catch (err) {
       setError(err.message || 'Update failed')
@@ -147,12 +157,25 @@ export default function ProfilePage() {
             />
           </div>
           <div>
+            <label className="block text-sm font-medium mb-1.5">Current password</label>
+            <input
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="Required only when changing password"
+              autoComplete="current-password"
+              className="w-full rounded-[14px] border border-silver/30 bg-white/50 dark:bg-graphite/50 px-4 py-2.5 outline-none focus:border-volt"
+            />
+          </div>
+          <div>
             <label className="block text-sm font-medium mb-1.5">New password</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Leave blank to keep current"
+              autoComplete="new-password"
+              minLength={8}
               className="w-full rounded-[14px] border border-silver/30 bg-white/50 dark:bg-graphite/50 px-4 py-2.5 outline-none focus:border-volt"
             />
           </div>

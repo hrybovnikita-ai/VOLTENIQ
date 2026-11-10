@@ -44,15 +44,16 @@ export async function verifyClerkSessionToken(token) {
     throw err;
   }
 
+  // Only trust a Google external account whose email matches the primary email.
+  // Never fall back to a mismatched Google subject — that can poison googleId links.
   const googleAccount = clerkUser.externalAccounts?.find((account) => (
     account.provider === 'oauth_google'
     && account.emailAddress?.toLowerCase() === email.toLowerCase()
-  )) || clerkUser.externalAccounts?.find((account) => account.provider === 'oauth_google');
+  )) || null;
 
   const googleVerified = Boolean(
     googleAccount
     && googleAccount.verification?.status === 'verified'
-    && googleAccount.emailAddress?.toLowerCase() === email.toLowerCase()
   );
 
   const emailVerified = primary?.verification?.status === 'verified' || googleVerified;
@@ -71,7 +72,7 @@ export async function verifyClerkSessionToken(token) {
     emailVerified: true,
     googleVerified,
     name: name || null,
-    googleId: googleAccount?.providerUserId || null,
+    googleId: googleVerified ? (googleAccount?.providerUserId || null) : null,
     avatarUrl: clerkUser.imageUrl || null,
   };
 }

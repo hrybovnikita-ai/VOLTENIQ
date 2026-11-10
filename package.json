@@ -3,14 +3,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "npm run build --prefix frontend && npm run prisma:generate --prefix backend",
+    "dev": "concurrently -k -n backend,frontend -c cyan,magenta \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
     "dev:backend": "npm run dev --prefix backend",
     "dev:frontend": "npm run dev --prefix frontend",
+    "build": "npm run build --prefix frontend && npm run prisma:generate --prefix backend",
     "start": "npm start --prefix backend",
     "test": "npm test --prefix frontend && npm run test:auth --prefix backend"
   },
   "dependencies": {
     "@neon/config": "^1.13.0",
     "@neon/env": "^2.1.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.5"
   }
 }

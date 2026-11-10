@@ -39,8 +39,8 @@ export async function createUser({
   avatarUrl = null,
 }) {
   const hashed = password
-    ? await bcrypt.hash(password, 10)
-    : await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
+    ? await bcrypt.hash(password, 12)
+    : await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 12);
 
   try {
     // Omit role entirely so PostgreSQL supplies USER. The API login cannot grant roles.
@@ -242,18 +242,42 @@ export async function findOrCreateFirebaseUser({
   });
 }
 
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync('volteniq-timing-pad', 10);
+
 export async function verifyPassword(user, password) {
-  if (!user?.password || !password || Buffer.byteLength(password, 'utf8') > 72) return false;
-  if (user.googleId && user.password?.startsWith('GOOGLE_ONLY')) return false;
+  if (!password || Buffer.byteLength(password, 'utf8') > 72) {
+    await bcrypt.compare(password || 'invalid', DUMMY_PASSWORD_HASH);
+    return false;
+  }
+  if (!user?.password) {
+    await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
+    return false;
+  }
+  if (user.googleId && user.password?.startsWith('GOOGLE_ONLY')) {
+    await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
+    return false;
+  }
   return bcrypt.compare(password, user.password);
+}
+
+function sanitizeAvatarUrl(value) {
+  if (value == null || value === '') return null;
+  const raw = String(value).trim().slice(0, 2048);
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:') return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 export async function updateUser(id, data) {
   const update = {};
   if (data.name) update.name = data.name;
-  if (data.password) update.password = await bcrypt.hash(data.password, 10);
+  if (data.password) update.password = await bcrypt.hash(data.password, 12);
   if (data.avatarUrl !== undefined) {
-    update.avatarUrl = data.avatarUrl ? String(data.avatarUrl).slice(0, 2048) : null;
+    update.avatarUrl = sanitizeAvatarUrl(data.avatarUrl);
   }
 
   const user = await prisma.user.update({ where: { id }, data: update });

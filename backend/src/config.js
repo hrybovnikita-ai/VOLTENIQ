@@ -48,10 +48,17 @@ const corsOrigin = uniqueOrigins([
   ...(process.env.NODE_ENV === 'production' ? vercelOrigins : [...defaultOrigins, ...vercelOrigins]),
 ]);
 
+// True only on the real Vercel runtime. A local `vercel env pull` may set
+// VERCEL=1, which must not flip local cookie/CORS/listen behavior.
+const isVercelRuntime = Boolean(
+  process.env.VERCEL
+  && (process.env.VERCEL_REGION || process.env.VERCEL_DEPLOYMENT_ID)
+);
+
 export const config = {
   port: Number(process.env.PORT) || 5004,
   nodeEnv: process.env.NODE_ENV || 'development',
-  isVercel: Boolean(process.env.VERCEL),
+  isVercel: isVercelRuntime,
   demoMode: String(process.env.DEMO_MODE || 'false').toLowerCase() === 'true',
   jwtSecret: process.env.JWT_SECRET || 'volteniq-demo-secret-change-me',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',

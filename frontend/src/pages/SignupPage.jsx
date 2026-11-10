@@ -5,6 +5,7 @@ import AuthLayout from '../components/auth/AuthLayout'
 import AuthPasswordField from '../components/auth/AuthPasswordField'
 import GoogleSignInButton from '../components/auth/GoogleSignInButton'
 import Button from '../components/ui/Button'
+import { safeRedirectPath } from '../utils/safeRedirect'
 
 const inputClass = 'auth-input'
 
@@ -20,7 +21,7 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false)
 
   if (isAuthenticated) {
-    const dest = location.state?.from || '/'
+    const dest = safeRedirectPath(location.state?.from, '/')
     return <Navigate to={dest} replace />
   }
 
@@ -31,8 +32,8 @@ export default function SignupPage() {
       setError('Passwords do not match')
       return
     }
-    if (form.password.length < 6) {
-      setError('Password must be at least 6 characters')
+    if (form.password.length < 8) {
+      setError('Password must be at least 8 characters')
       return
     }
     setLoading(true)
@@ -89,8 +90,8 @@ export default function SignupPage() {
           value={form.password}
           onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
           autoComplete="new-password"
-          placeholder="At least 6 characters"
-          minLength={6}
+          placeholder="At least 8 characters"
+          minLength={8}
         />
 
         <AuthPasswordField
@@ -100,10 +101,22 @@ export default function SignupPage() {
           onChange={(e) => setForm((f) => ({ ...f, confirmPassword: e.target.value }))}
           autoComplete="new-password"
           placeholder="Repeat your password"
-          minLength={6}
+          minLength={8}
         />
 
-        {error ? <p role="alert" className="text-sm text-red-400">{error}</p> : null}
+        {error ? (
+          <p role="alert" className="text-sm text-red-400">
+            {error}
+            {/already registered|already exists/i.test(error) ? (
+              <>
+                {' '}
+                <Link to="/login" state={location.state} className="text-volt font-semibold hover:underline">
+                  Sign In
+                </Link>
+              </>
+            ) : null}
+          </p>
+        ) : null}
 
         <Button type="submit" className="w-full rounded-[16px]" size="lg" disabled={loading}>
           {loading ? 'Creating account...' : 'Create Account'}

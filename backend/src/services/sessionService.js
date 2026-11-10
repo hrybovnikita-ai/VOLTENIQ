@@ -76,6 +76,12 @@ export async function endSession(req, res) {
   res.clearCookie(SESSION_COOKIE_NAME, cookieOptions);
 }
 
+/** Revoke every store session for a user (password change / recovery). */
+export async function revokeAllUserSessions(userId) {
+  if (!userId) return;
+  await prisma.session.deleteMany({ where: { userId } });
+}
+
 export async function sessionUser(req) {
   const id = sessionId(req);
   if (!id) return null;

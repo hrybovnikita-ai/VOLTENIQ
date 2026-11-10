@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "test:checkout": "node --test src/utils/demoPayment.test.js",
     "test:assistant": "node --test src/utils/assistantBrain.test.js src/utils/chatHistory.test.js",
-    "test": "node --test src/utils/demoPayment.test.js src/utils/assistantBrain.test.js src/utils/chatHistory.test.js"
+    "test": "node --test src/utils/demoPayment.test.js src/utils/assistantBrain.test.js src/utils/chatHistory.test.js src/utils/safeRedirect.test.js"
   },
   "dependencies": {
     "@clerk/react": "^6.18.6",

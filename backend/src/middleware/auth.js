@@ -23,6 +23,7 @@ export async function authenticate(req, res, next) {
         email: claims.email,
         name: claims.name,
         emailVerified: claims.emailVerified,
+        googleVerified: claims.googleVerified,
         googleId: claims.googleId,
         avatarUrl: claims.avatarUrl,
       });
