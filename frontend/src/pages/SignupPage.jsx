@@ -123,7 +123,7 @@ export default function SignupPage() {
             setLoading(true)
             setError('')
             try {
-              await loginWithGoogle('signUp')
+              await loginWithGoogle()
             } catch (err) {
               setError(err.message || 'Google sign-in failed')
               setLoading(false)

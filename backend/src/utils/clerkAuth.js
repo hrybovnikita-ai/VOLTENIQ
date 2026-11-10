@@ -44,12 +44,18 @@ export async function verifyClerkSessionToken(token) {
     throw err;
   }
 
-  const emailVerified = primary?.verification?.status === 'verified'
-    || Boolean(clerkUser.externalAccounts?.some((account) => (
-      account.provider === 'oauth_google'
-      && account.verification?.status === 'verified'
-      && account.emailAddress?.toLowerCase() === email.toLowerCase()
-    )));
+  const googleAccount = clerkUser.externalAccounts?.find((account) => (
+    account.provider === 'oauth_google'
+    && account.emailAddress?.toLowerCase() === email.toLowerCase()
+  )) || clerkUser.externalAccounts?.find((account) => account.provider === 'oauth_google');
+
+  const googleVerified = Boolean(
+    googleAccount
+    && googleAccount.verification?.status === 'verified'
+    && googleAccount.emailAddress?.toLowerCase() === email.toLowerCase()
+  );
+
+  const emailVerified = primary?.verification?.status === 'verified' || googleVerified;
 
   if (!emailVerified) {
     const err = new Error('Verify your email with Google/Clerk before continuing');
@@ -58,12 +64,12 @@ export async function verifyClerkSessionToken(token) {
   }
 
   const name = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(' ').trim();
-  const googleAccount = clerkUser.externalAccounts?.find((account) => account.provider === 'oauth_google');
 
   return {
     clerkId,
     email,
     emailVerified: true,
+    googleVerified,
     name: name || null,
     googleId: googleAccount?.providerUserId || null,
     avatarUrl: clerkUser.imageUrl || null,

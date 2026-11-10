@@ -72,21 +72,24 @@ function ClerkAuthProvider({ children }) {
     throw new Error('Email verification is handled by the store account flow')
   }
 
-  async function loginWithGoogle(mode = 'signIn') {
+  async function loginWithGoogle() {
     if (clerk.isSignedIn) return syncClerkSession()
     // A first click can arrive before the external Clerk script has initialized.
     const deadline = Date.now() + 8000
     while (!clerkSdk.client && Date.now() < deadline) {
       await new Promise(resolve => setTimeout(resolve, 100))
     }
-    if (!clerkSdk.client) {
+    if (!clerkSdk.client?.signIn) {
       throw new Error('Google sign-in could not load. Retry in Safari or Chrome, or use email and password.')
     }
     try {
-      await clerkSdk.client[mode].authenticateWithRedirect({
+      // Always start on SignIn. Clerk transfers new Google users to SignUp when needed,
+      // which avoids minting a second Clerk user for an email that already exists.
+      await clerkSdk.client.signIn.authenticateWithRedirect({
         strategy: 'oauth_google',
         redirectUrl: `${window.location.origin}/sso-callback`,
         redirectUrlComplete: `${window.location.origin}/sso-callback?finish=1`,
+        oidcPrompt: 'select_account',
       })
     } catch (error) {
       throw new Error(mapClerkError(error), { cause: error })

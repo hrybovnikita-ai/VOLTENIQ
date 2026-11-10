@@ -60,16 +60,82 @@ export async function createUser({
   }
 }
 
+function identityConflict(message) {
+  const err = new Error(message);
+  err.status = 409;
+  return err;
+}
+
 /**
- * Link a verified Clerk identity to an existing Prisma user by email, or create one.
+ * After Google OAuth proves control of the email (and Google subject when present),
+ * an existing store row may adopt a newer Clerk user id. Blind email-only merges
+ * without that proof remain rejected.
+ */
+function canAdoptClerkId(existing, { clerkId, googleId, googleVerified }) {
+  if (!existing.clerkId || existing.clerkId === clerkId) return true;
+  if (!googleVerified || !googleId) return false;
+  if (existing.googleId && existing.googleId !== googleId) return false;
+  return true;
+}
+
+function profilePatch(existing, { name, googleId, avatarUrl }) {
+  const patch = {};
+  if (name && !existing.name) patch.name = name;
+  if (googleId && !existing.googleId) patch.googleId = googleId;
+  if (avatarUrl) patch.avatarUrl = avatarUrl;
+  return patch;
+}
+
+async function attachClerkIdentity(existing, {
+  clerkId,
+  email,
+  name,
+  googleId = null,
+  avatarUrl = null,
+  googleVerified = false,
+}) {
+  if (existing.email.toLowerCase() !== email.toLowerCase()) {
+    throw identityConflict('This identity is already linked to a different email');
+  }
+
+  if (googleId && existing.googleId && existing.googleId !== googleId) {
+    throw identityConflict('This Google account does not match the linked store account');
+  }
+
+  if (!canAdoptClerkId(existing, { clerkId, googleId, googleVerified })) {
+    throw identityConflict('This email is already linked to another Clerk account');
+  }
+
+  const taken = await findUserByClerkId(clerkId);
+  if (taken && taken.id !== existing.id) {
+    throw identityConflict('This Clerk account is already linked to a different store user');
+  }
+
+  const data = {
+    ...profilePatch(existing, { name, googleId, avatarUrl }),
+  };
+  if (existing.clerkId !== clerkId) data.clerkId = clerkId;
+
+  if (!Object.keys(data).length) return sanitize(existing);
+
+  const updated = await prisma.user.update({
+    where: { id: existing.id },
+    data,
+  });
+  return sanitize(updated);
+}
+
+/**
+ * Link a verified Clerk identity to an existing Prisma user, or create one.
  * Never deletes users and never creates a second row for the same email.
- * Requires a verified email from Clerk to prevent account takeover.
+ * Requires a verified email; clerkId replacement requires verified Google ownership.
  */
 export async function findOrCreateClerkUser({
   clerkId,
   email,
   name,
   emailVerified = false,
+  googleVerified = false,
   googleId = null,
   avatarUrl = null,
 }) {
@@ -84,54 +150,40 @@ export async function findOrCreateClerkUser({
     throw err;
   }
 
+  const claims = { clerkId, email, name, googleId, avatarUrl, googleVerified };
+
   const existingByClerk = await findUserByClerkId(clerkId);
   if (existingByClerk) {
-    if (existingByClerk.email.toLowerCase() !== email.toLowerCase()) {
-      const err = new Error('This Clerk account is already linked to a different email');
-      err.status = 409;
-      throw err;
+    return attachClerkIdentity(existingByClerk, claims);
+  }
+
+  if (googleId) {
+    const existingByGoogle = await findUserByGoogleId(googleId);
+    if (existingByGoogle) {
+      return attachClerkIdentity(existingByGoogle, claims);
     }
-    const patch = {};
-    if (name && !existingByClerk.name) patch.name = name;
-    if (googleId && !existingByClerk.googleId) patch.googleId = googleId;
-    if (avatarUrl) patch.avatarUrl = avatarUrl;
-    if (Object.keys(patch).length) {
-      const updated = await prisma.user.update({
-        where: { id: existingByClerk.id },
-        data: patch,
-      });
-      return sanitize(updated);
-    }
-    return sanitize(existingByClerk);
   }
 
   const existingByEmail = await findUserByEmail(email);
   if (existingByEmail) {
-    if (existingByEmail.clerkId && existingByEmail.clerkId !== clerkId) {
-      const err = new Error('This email is already linked to another Clerk account');
-      err.status = 409;
-      throw err;
-    }
-
-    // Verified Google/Clerk email may link to the existing store row (no duplicate).
-    const updated = await prisma.user.update({
-      where: { id: existingByEmail.id, OR: [{ clerkId: null }, { clerkId }] },
-      data: {
-        clerkId,
-        ...(googleId && !existingByEmail.googleId ? { googleId } : {}),
-        ...(name && !existingByEmail.name ? { name } : {}),
-        ...(avatarUrl ? { avatarUrl } : {}),
-      },
-    });
-    return sanitize(updated);
+    return attachClerkIdentity(existingByEmail, claims);
   }
 
   try {
-    return await createUser({ name: name || email.split('@')[0], email, password: null, clerkId, googleId, avatarUrl });
+    return await createUser({
+      name: name || email.split('@')[0],
+      email,
+      password: null,
+      clerkId,
+      googleId,
+      avatarUrl,
+    });
   } catch (error) {
     if (error.status !== 409) throw error;
     const concurrent = await findUserByClerkId(clerkId);
     if (concurrent?.email.toLowerCase() === email.toLowerCase()) return sanitize(concurrent);
+    const byEmail = await findUserByEmail(email);
+    if (byEmail) return attachClerkIdentity(byEmail, claims);
     throw error;
   }
 }

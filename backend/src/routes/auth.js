@@ -96,6 +96,7 @@ router.post(
       email: claims.email,
       name: claims.name || nameFromEmail(claims.email),
       emailVerified: claims.emailVerified,
+      googleVerified: claims.googleVerified,
       googleId: claims.googleId,
       avatarUrl: claims.avatarUrl,
     });
