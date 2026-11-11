@@ -106,7 +106,9 @@ export default function LoginPage() {
             setLoading(true)
             setError('')
             try {
-              await loginWithGoogle()
+              const user = await loginWithGoogle()
+              // null => browser redirected to Google (Safari / popup blocked).
+              if (!user) return
             } catch (err) {
               setError(err.message || 'Google sign-in failed')
               setLoading(false)

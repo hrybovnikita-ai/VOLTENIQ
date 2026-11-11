@@ -1,10 +1,18 @@
-import { initializeApp } from 'firebase/app'
+import { initializeApp, getApp, getApps } from 'firebase/app'
 import {
-  initializeAuth, signInWithPopup, signOut,
+  initializeAuth,
+  getAuth,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  signOut,
   browserPopupRedirectResolver,
-  inMemoryPersistence,
+  browserLocalPersistence,
   GoogleAuthProvider,
 } from 'firebase/auth'
+import { mapFirebaseAuthError, shouldPreferGoogleRedirect } from './firebaseAuthPolicy.js'
+
+export { mapFirebaseAuthError, shouldPreferGoogleRedirect } from './firebaseAuthPolicy.js'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -15,58 +23,90 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 }
 
-export const firebaseConfigured = ['apiKey', 'authDomain', 'projectId', 'appId'].every(key => firebaseConfig[key])
+export const firebaseConfigured = ['apiKey', 'authDomain', 'projectId', 'appId'].every(
+  (key) => firebaseConfig[key]
+)
+
 let auth
-export async function googleIdToken() {
-  if (!firebaseConfigured) throw new Error('Google sign-in is unavailable. Use email and password.')
-  auth ??= initializeAuth(initializeApp(firebaseConfig, 'volteniq-google'), {
-    persistence: inMemoryPersistence, popupRedirectResolver: browserPopupRedirectResolver,
-  })
-  const provider = new GoogleAuthProvider()
-  provider.setCustomParameters({ prompt: 'select_account' })
+
+function getFirebaseAuth() {
+  if (auth) return auth
+  const app = getApps().some((entry) => entry.name === 'volteniq-google')
+    ? getApp('volteniq-google')
+    : initializeApp(firebaseConfig, 'volteniq-google')
   try {
-    const result = await signInWithPopup(auth, provider)
-    return await result.user.getIdToken()
-  } catch (error) {
-    throw new Error(mapFirebaseAuthError(error))
-  } finally {
-    await signOut(auth)
+    // Local persistence is required for signInWithRedirect / getRedirectResult
+    // (Safari, iOS, and popup-blocked desktop). We sign out immediately after
+    // minting an ID token so Firebase does not keep a long-lived browser session.
+    auth = initializeAuth(app, {
+      persistence: browserLocalPersistence,
+      popupRedirectResolver: browserPopupRedirectResolver,
+    })
+  } catch {
+    auth = getAuth(app)
   }
+  return auth
 }
 
-export function mapFirebaseAuthError(error) {
-  const code = error?.code || ''
-  switch (code) {
-    case 'auth/invalid-email':
-      return 'Please enter a valid email address.'
-    case 'auth/user-disabled':
-      return 'This account has been disabled.'
-    case 'auth/user-not-found':
-    case 'auth/wrong-password':
-    case 'auth/invalid-credential':
-    case 'auth/invalid-login-credentials':
-      return 'Invalid email or password.'
-    case 'auth/email-already-in-use':
-      return 'An account with this email already exists.'
-    case 'auth/weak-password':
-      return 'Password must be at least 6 characters.'
-    case 'auth/too-many-requests':
-      return 'Too many attempts. Please try again later.'
-    case 'auth/popup-closed-by-user':
-      return 'Google sign-in was cancelled.'
-    case 'auth/popup-blocked':
-      return 'Pop-up blocked. Allow pop-ups for this site and try again.'
-    case 'auth/cancelled-popup-request':
-      return 'Google sign-in was cancelled.'
-    case 'auth/account-exists-with-different-credential':
-      return 'An account already exists with this email using a different sign-in method.'
-    case 'auth/network-request-failed':
-      return 'Network error. Check your connection and try again.'
-    case 'auth/operation-not-allowed':
-      return 'This sign-in method is not enabled in Firebase.'
-    case 'auth/unauthorized-domain':
-      return 'This domain is not authorized for Firebase Auth. Authorize this storefront domain in Firebase Authentication.'
-    default:
-      return error?.message || 'Authentication failed.'
+function googleProvider() {
+  const provider = new GoogleAuthProvider()
+  provider.setCustomParameters({ prompt: 'select_account' })
+  return provider
+}
+
+function isPopupFailure(error) {
+  return [
+    'auth/popup-blocked',
+    'auth/popup-closed-by-user',
+    'auth/cancelled-popup-request',
+  ].includes(error?.code)
+}
+
+async function idTokenFromUser(user) {
+  const token = await user.getIdToken()
+  await signOut(getFirebaseAuth()).catch(() => {})
+  return token
+}
+
+/**
+ * Continue a Google redirect that returned to this origin.
+ * Returns an ID token string, or null when no redirect is pending.
+ */
+export async function consumeGoogleRedirectResult() {
+  if (!firebaseConfigured) return null
+  const result = await getRedirectResult(getFirebaseAuth())
+  if (!result?.user) return null
+  return idTokenFromUser(result.user)
+}
+
+/**
+ * Start Google sign-in. Returns a Firebase ID token, or null when a full-page
+ * redirect was started (caller should leave the UI in a loading state).
+ */
+export async function googleIdToken() {
+  if (!firebaseConfigured) {
+    throw new Error('Google sign-in is unavailable. Use email and password.')
+  }
+
+  const instance = getFirebaseAuth()
+  const provider = googleProvider()
+
+  const preferRedirect = typeof navigator !== 'undefined'
+    ? shouldPreferGoogleRedirect(navigator.userAgent, navigator.platform, navigator.maxTouchPoints)
+    : false
+  if (preferRedirect) {
+    await signInWithRedirect(instance, provider)
+    return null
+  }
+
+  try {
+    const result = await signInWithPopup(instance, provider)
+    return idTokenFromUser(result.user)
+  } catch (error) {
+    if (isPopupFailure(error)) {
+      await signInWithRedirect(instance, provider)
+      return null
+    }
+    throw new Error(mapFirebaseAuthError(error))
   }
 }

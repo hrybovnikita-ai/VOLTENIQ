@@ -2,15 +2,48 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { useAuth as useClerkAuth, useClerk } from '@clerk/react'
 import { api } from '../api/client'
 import { isClerkEnabled, mapClerkError } from '../lib/clerk'
-import { firebaseConfigured, googleIdToken } from '../lib/firebase'
+import { consumeGoogleRedirectResult, firebaseConfigured, googleIdToken } from '../lib/firebase'
 import Spinner from '../components/ui/Spinner'
 
 const AuthContext = createContext(null)
 
-
 async function restoreCookieSession() {
   const { data } = await api.session()
   return data.user || null
+}
+
+/**
+ * Clear the storefront cookie session and confirm the server no longer
+ * recognizes it. Always clears local React state afterward.
+ */
+async function clearStoreSession({ revision, setUser }) {
+  revision.current += 1
+  let serverError = null
+  try {
+    await api.logout()
+  } catch (error) {
+    serverError = error
+  }
+
+  let stillSignedIn = false
+  try {
+    const remaining = await restoreCookieSession()
+    stillSignedIn = Boolean(remaining)
+  } catch {
+    stillSignedIn = false
+  }
+
+  setUser(null)
+
+  if (stillSignedIn) {
+    const err = new Error(
+      serverError?.message
+        || 'Sign-out could not revoke the server session. Please try again.'
+    )
+    err.status = serverError?.status || 500
+    err.code = 'logout_session_persist'
+    throw err
+  }
 }
 
 function ClerkAuthProvider({ children }) {
@@ -39,11 +72,6 @@ function ClerkAuthProvider({ children }) {
     localStorage.removeItem('volteniq_token')
 
     async function bootstrap() {
-
-
-      // Restore the store cookie independently of the external OAuth SDK.
-
-
       try {
         const nextUser = await restoreCookieSession()
         if (active && version === revision.current) setUser(nextUser)
@@ -85,17 +113,14 @@ function ClerkAuthProvider({ children }) {
 
   async function loginWithGoogle() {
     if (clerk.isSignedIn) return syncClerkSession()
-    // A first click can arrive before the external Clerk script has initialized.
     const deadline = Date.now() + 8000
     while (!clerkSdk.client && Date.now() < deadline) {
-      await new Promise(resolve => setTimeout(resolve, 100))
+      await new Promise((resolve) => setTimeout(resolve, 100))
     }
     if (!clerkSdk.client?.signIn) {
       throw new Error('Google sign-in could not load. Retry in Safari or Chrome, or use email and password.')
     }
     try {
-      // Always start on SignIn. Clerk transfers new Google users to SignUp when needed,
-      // which avoids minting a second Clerk user for an email that already exists.
       await clerkSdk.client.signIn.authenticateWithRedirect({
         strategy: 'oauth_google',
         redirectUrl: `${window.location.origin}/sso-callback`,
@@ -109,14 +134,13 @@ function ClerkAuthProvider({ children }) {
   }
 
   async function logout() {
-    revision.current += 1
     try {
-      await api.logout()
+      await clearStoreSession({ revision, setUser })
     } finally {
       try {
         if (clerk.isSignedIn) await clerkSdk.signOut({ redirectUrl: window.location.origin })
       } catch {
-        // Cookie session already cleared.
+        // Store cookie session is already cleared.
       }
       setUser(null)
     }
@@ -156,30 +180,44 @@ function LegacyAuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
   const revision = useRef(0)
 
+  const saveSession = useCallback(({ data }) => {
+    revision.current += 1
+    setUser(data.user)
+    return data.user
+  }, [])
+
   useEffect(() => {
     const version = revision.current
     let active = true
     localStorage.removeItem('volteniq_token')
 
-    restoreCookieSession()
-      .then((nextUser) => {
-        if (active && version === revision.current) setUser(nextUser)
-      })
-      .catch(() => { if (active && version === revision.current) setUser(null) })
-      .finally(() => {
-        if (active) setLoading(false)
-      })
+    async function bootstrap() {
+      try {
+        // Complete Firebase redirect OAuth before restoring a cookie session.
+        const redirectToken = firebaseConfigured
+          ? await consumeGoogleRedirectResult()
+          : null
+        if (!active || version !== revision.current) return
 
+        if (redirectToken) {
+          saveSession(await api.firebaseSession({ idToken: redirectToken }))
+          return
+        }
+
+        const nextUser = await restoreCookieSession()
+        if (active && version === revision.current) setUser(nextUser)
+      } catch {
+        if (active && version === revision.current) setUser(null)
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+
+    bootstrap()
     return () => {
       active = false
     }
-  }, [])
-
-  function saveSession({ data }) {
-    revision.current += 1
-    setUser(data.user)
-    return data.user
-  }
+  }, [saveSession])
 
   if (loading) {
     return (
@@ -204,22 +242,20 @@ function LegacyAuthProvider({ children }) {
           if (response?.data?.needsVerification) {
             return { user: null, needsVerification: true, email: response.data.email || email }
           }
-          return { user: saveSession(response), needsVerification: false }
+          if (response?.data?.user) {
+            return { user: saveSession(response), needsVerification: false }
+          }
+          return { user: null, needsVerification: true, email }
         },
         verifyEmailCode: async ({ email, token }) => saveSession(await api.verifyEmail({ email, token })),
         resendVerification: async (email) => api.resendVerification({ email }),
         loginWithGoogle: async () => {
           const idToken = await googleIdToken()
+          // null => full-page redirect started (Safari / popup-blocked).
+          if (!idToken) return null
           return saveSession(await api.firebaseSession({ idToken }))
         },
-        logout: async () => {
-          revision.current += 1
-          try {
-            await api.logout()
-          } finally {
-            setUser(null)
-          }
-        },
+        logout: async () => clearStoreSession({ revision, setUser }),
         updateProfile: async (payload) => {
           const { data } = await api.updateProfile(payload)
           setUser(data.user)

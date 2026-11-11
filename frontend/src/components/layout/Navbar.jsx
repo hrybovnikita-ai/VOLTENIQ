@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { Link, NavLink, useNavigate } from 'react-router-dom'
 import {
   Menu,
   X,
@@ -37,11 +37,27 @@ function initials(user) {
 
 export default function Navbar() {
   const [open, setOpen] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
+  const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
   const { count } = useCart()
   const { ids: favIds } = useFavorites()
   const { ids: compareIds } = useCompare()
   const { user, isAdmin, logout, loading: authLoading } = useAuth()
+
+  const handleSignOut = async () => {
+    if (signingOut) return
+    setSigningOut(true)
+    try {
+      await logout()
+    } catch {
+      // Local session is cleared even when the network call fails; still leave auth screens.
+    } finally {
+      setOpen(false)
+      setSigningOut(false)
+      navigate('/login', { replace: true })
+    }
+  }
 
   useEffect(() => {
     const escape = (event) => {
@@ -199,12 +215,11 @@ export default function Navbar() {
                     </Link>
                     <button
                       type="button"
-                      className="w-full rounded-lg p-2 text-left hover:bg-volt/10 hover:text-volt"
-                      onClick={() => {
-                        logout()
-                      }}
+                      className="w-full rounded-lg p-2 text-left hover:bg-volt/10 hover:text-volt disabled:opacity-60"
+                      disabled={signingOut}
+                      onClick={handleSignOut}
                     >
-                      Sign Out
+                      {signingOut ? 'Signing out…' : 'Sign Out'}
                     </button>
                   </div>
                 </details>
@@ -303,13 +318,13 @@ export default function Navbar() {
                   {user && (
                     <button
                       type="button"
-                      className="text-left text-[0.95rem] font-medium text-muted hover:text-volt min-h-11"
-                      onClick={() => {
-                        logout()
-                        close()
+                      className="text-left text-[0.95rem] font-medium text-muted hover:text-volt min-h-11 disabled:opacity-60"
+                      disabled={signingOut}
+                      onClick={async () => {
+                        await handleSignOut()
                       }}
                     >
-                      Sign Out
+                      {signingOut ? 'Signing out…' : 'Sign Out'}
                     </button>
                   )}
                 </nav>

@@ -64,14 +64,24 @@ export default function ProfilePage() {
     setSessions(res.data.sessions || [])
   }
 
+  const handleLogout = async () => {
+    setError('')
+    try {
+      await logout()
+    } catch (err) {
+      setError(err.message || 'Sign-out failed. Please try again.')
+    } finally {
+      navigate('/login', { replace: true })
+    }
+  }
+
   const revokeSession = async (id) => {
     setSessionsBusy(true)
     setError('')
     try {
       await api.revokeSession(id)
       if (sessions.find((s) => s.id === id)?.current) {
-        await logout()
-        navigate('/login', { replace: true })
+        await handleLogout()
         return
       }
       await refreshSessions()
@@ -169,7 +179,7 @@ export default function ProfilePage() {
               Admin dashboard
             </Button>
           )}
-          <Button variant="ghost" onClick={logout}>
+          <Button variant="ghost" onClick={handleLogout}>
             Log out
           </Button>
         </div>

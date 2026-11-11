@@ -141,7 +141,8 @@ export default function SignupPage() {
             setLoading(true)
             setError('')
             try {
-              await loginWithGoogle()
+              const user = await loginWithGoogle()
+              if (!user) return
             } catch (err) {
               setError(err.message || 'Google sign-in failed')
               setLoading(false)

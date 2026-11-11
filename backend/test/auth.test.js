@@ -163,6 +163,21 @@ test('register requires verification before password login and sets HttpOnly ses
       cookie: login.cookie,
     });
     assert.equal(logout.response.status, 200);
+    const cleared = logout.setCookie.filter((value) => /volteniq_session=/i.test(String(value)));
+    assert.ok(cleared.length >= 1, 'logout must clear the session cookie');
+    assert.ok(
+      cleared.every((value) => /Max-Age=0|Expires=/i.test(String(value))),
+      'logout Set-Cookie must expire the session cookie for Safari/Chrome'
+    );
+    assert.ok(
+      cleared.some((value) => String(value).startsWith(`${SESSION_COOKIE_NAME}=`)),
+      'logout must clear the active session cookie name'
+    );
+
+    const remainingSessions = await prisma.session.count({
+      where: { userId: login.payload.data.user.id },
+    });
+    assert.equal(remainingSessions, 0);
 
     const meAfterLogout = await request('/api/auth/me', { cookie: login.cookie });
     assert.equal(meAfterLogout.response.status, 401);

@@ -1,13 +1,31 @@
 import axios from 'axios'
 
-function resolveApiUrl() {
-  const raw = String(import.meta.env.VITE_API_URL || '').trim()
+export function resolveApiUrl(rawEnv, locationOrigin = '') {
+  const raw = String(rawEnv ?? '').trim()
   // Guard against Git Bash mangling `/api` into a Windows path when setting Vercel env.
   if (!raw || /^[A-Za-z]:[\\/]/.test(raw) || raw.includes('Program Files')) return '/api'
-  return raw.replace(/\/$/, '') || '/api'
+
+  const normalized = raw.replace(/\/$/, '') || '/api'
+  // Prefer same-origin `/api` so HttpOnly session cookies stay first-party on
+  // every Vercel alias (desktop + mobile Safari/Chrome). Absolute API hosts that
+  // differ from the page origin make Set-Cookie cross-site and break auth.
+  if (locationOrigin && /^https?:\/\//i.test(normalized)) {
+    try {
+      const api = new URL(normalized)
+      const page = new URL(locationOrigin)
+      if (api.origin === page.origin) return `${api.pathname.replace(/\/$/, '') || '/api'}`
+    } catch {
+      return '/api'
+    }
+  }
+  return normalized
 }
 
-const API_URL = resolveApiUrl()
+const viteApiUrl = (typeof import.meta !== 'undefined' && import.meta.env)
+  ? import.meta.env.VITE_API_URL
+  : undefined
+const pageOrigin = typeof window !== 'undefined' ? window.location.origin : ''
+const API_URL = resolveApiUrl(viteApiUrl, pageOrigin)
 
 export const http = axios.create({
   baseURL: API_URL,

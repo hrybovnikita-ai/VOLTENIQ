@@ -90,10 +90,23 @@ export async function startSession(req, res, userId) {
   });
 }
 
+function clearSessionCookie(res, name) {
+  // Mirror set options exactly so Safari / Chrome / iOS drop __Host- and legacy cookies.
+  res.clearCookie(name, {
+    ...cookieOptions,
+    maxAge: 0,
+    expires: new Date(0),
+  });
+}
+
 export async function endSession(req, res) {
   const id = sessionId(req);
   if (id) await prisma.session.deleteMany({ where: { id } });
-  res.clearCookie(SESSION_COOKIE_NAME, cookieOptions);
+  clearSessionCookie(res, SESSION_COOKIE_NAME);
+  // Also clear the alternate name in case an older deploy left a stale cookie.
+  clearSessionCookie(res, SESSION_COOKIE_NAME === '__Host-volteniq_session'
+    ? 'volteniq_session'
+    : '__Host-volteniq_session');
 }
 
 /** Revoke every store session for a user (password change / recovery). */
