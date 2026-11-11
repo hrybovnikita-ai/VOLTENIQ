@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AuthLayout from '../components/auth/AuthLayout'
@@ -6,19 +6,29 @@ import AuthPasswordField from '../components/auth/AuthPasswordField'
 import GoogleSignInButton from '../components/auth/GoogleSignInButton'
 import Button from '../components/ui/Button'
 import { safeRedirectPath } from '../utils/safeRedirect'
+import { clearAuthRedirect, peekAuthRedirect } from '../utils/purchaseIntent'
 
 const inputClass = 'auth-input'
 
 export default function LoginPage() {
-  const { login, loginWithGoogle, isAuthenticated, googleEnabled } = useAuth()
+  const { login, loginWithGoogle, isAuthenticated, googleEnabled, authError, clearAuthError } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState(location.state?.oauthError || '')
   const [loading, setLoading] = useState(false)
 
+  // Router state is lost across a full-page Google redirect; RequireAuth and
+  // checkout also save the destination in sessionStorage.
+  const [savedRedirect] = useState(() => peekAuthRedirect())
+  const shownError = error || authError
+
+  useEffect(() => {
+    if (isAuthenticated) clearAuthRedirect()
+  }, [isAuthenticated])
+
   if (isAuthenticated) {
-    const dest = safeRedirectPath(location.state?.from, '/')
+    const dest = safeRedirectPath(location.state?.from || savedRedirect, '/')
     return <Navigate to={dest} replace />
   }
 
@@ -26,6 +36,7 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
     setError('')
+    clearAuthError()
     try {
       await login(form.email.trim(), form.password)
     } catch (err) {
@@ -86,7 +97,7 @@ export default function LoginPage() {
 
         <Link className="block text-sm text-volt font-semibold" to="/forgot-password">Forgot password?</Link>
 
-        {error ? <p role="alert" className="text-sm text-red-400">{error}</p> : null}
+        {shownError ? <p role="alert" className="text-sm text-red-400">{shownError}</p> : null}
 
         <Button type="submit" className="w-full rounded-[16px]" size="lg" disabled={loading}>
           {loading ? 'Signing in...' : 'Sign In'}
@@ -105,6 +116,7 @@ export default function LoginPage() {
           onClick={async () => {
             setLoading(true)
             setError('')
+            clearAuthError()
             try {
               const user = await loginWithGoogle()
               // null => browser redirected to Google (Safari / popup blocked).

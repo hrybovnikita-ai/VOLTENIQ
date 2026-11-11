@@ -1,8 +1,21 @@
 const KEY = 'volteniq_purchase_intent'
+
+// sessionStorage throws in some in-app WebViews and locked-down privacy modes.
+const session = {
+  getItem(key) {
+    try { return window.sessionStorage.getItem(key) } catch { return null }
+  },
+  setItem(key, value) {
+    try { window.sessionStorage.setItem(key, value) } catch { /* optional */ }
+  },
+  removeItem(key) {
+    try { window.sessionStorage.removeItem(key) } catch { /* optional */ }
+  },
+}
 const REDIRECT_KEY = 'volteniq_auth_redirect'
 
 export function savePurchaseIntent(intent) {
-  sessionStorage.setItem(
+  session.setItem(
     KEY,
     JSON.stringify({
       ...intent,
@@ -13,7 +26,7 @@ export function savePurchaseIntent(intent) {
 
 export function loadPurchaseIntent() {
   try {
-    const raw = sessionStorage.getItem(KEY)
+    const raw = session.getItem(KEY)
     if (!raw) return null
     const data = JSON.parse(raw)
     // Expire after 2 hours
@@ -28,16 +41,25 @@ export function loadPurchaseIntent() {
 }
 
 export function clearPurchaseIntent() {
-  sessionStorage.removeItem(KEY)
+  session.removeItem(KEY)
 }
 
 export function saveAuthRedirect(path) {
-  sessionStorage.setItem(REDIRECT_KEY, path || '/checkout')
+  session.setItem(REDIRECT_KEY, path || '/checkout')
+}
+
+/** Read the saved post-login destination without clearing it. */
+export function peekAuthRedirect() {
+  return session.getItem(REDIRECT_KEY)
+}
+
+export function clearAuthRedirect() {
+  session.removeItem(REDIRECT_KEY)
 }
 
 export function consumeAuthRedirect(fallback = '/profile') {
-  const path = sessionStorage.getItem(REDIRECT_KEY)
-  sessionStorage.removeItem(REDIRECT_KEY)
+  const path = session.getItem(REDIRECT_KEY)
+  session.removeItem(REDIRECT_KEY)
   if (path) return path
   const intent = loadPurchaseIntent()
   if (intent) return '/checkout'

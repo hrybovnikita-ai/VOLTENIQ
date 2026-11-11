@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { useAuth as useClerkAuth, useClerk } from '@clerk/react'
 import { api } from '../api/client'
 import { isClerkEnabled, mapClerkError } from '../lib/clerk'
-import { consumeGoogleRedirectResult, firebaseConfigured, googleIdToken } from '../lib/firebase'
+import { consumeGoogleRedirectResult, firebaseConfigured, firebaseSignOut, googleIdToken } from '../lib/firebase'
 import Spinner from '../components/ui/Spinner'
 
 const AuthContext = createContext(null)
@@ -120,6 +120,8 @@ function ClerkAuthProvider({ children }) {
         isAuthenticated: Boolean(user),
         isAdmin: user?.role === 'ADMIN',
         googleEnabled: true,
+        authError: '',
+        clearAuthError: () => {},
         login,
         register,
         verifyEmailCode,
@@ -138,10 +140,12 @@ function ClerkAuthProvider({ children }) {
 function LegacyAuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [authError, setAuthError] = useState('')
   const revision = useRef(0)
 
   const saveSession = useCallback(({ data }) => {
     revision.current += 1
+    setAuthError('')
     setUser(data.user)
     return data.user
   }, [])
@@ -152,16 +156,26 @@ function LegacyAuthProvider({ children }) {
     browserStorage.removeItem('volteniq_token')
 
     async function bootstrap() {
+      // Complete a Firebase Google redirect before restoring a cookie session.
+      // A failed redirect must still fall through to the cookie session and
+      // tell the shopper why Google did not sign them in.
+      let redirectToken = null
+      if (firebaseConfigured) {
+        try {
+          redirectToken = await consumeGoogleRedirectResult()
+        } catch (error) {
+          if (active) setAuthError(error.message || 'Google sign-in failed. Please try again.')
+        }
+      }
       try {
-        // Complete Firebase redirect OAuth before restoring a cookie session.
-        const redirectToken = firebaseConfigured
-          ? await consumeGoogleRedirectResult().catch(() => null)
-          : null
         if (!active || version !== revision.current) return
-
         if (redirectToken) {
-          saveSession(await api.firebaseSession({ idToken: redirectToken }))
-          return
+          try {
+            saveSession(await api.firebaseSession({ idToken: redirectToken }))
+            return
+          } catch (error) {
+            if (active) setAuthError(error.message || 'Google sign-in failed. Please try again.')
+          }
         }
 
         const nextUser = await restoreCookieSession()
@@ -196,6 +210,8 @@ function LegacyAuthProvider({ children }) {
         isAuthenticated: Boolean(user),
         isAdmin: user?.role === 'ADMIN',
         googleEnabled: firebaseConfigured,
+        authError,
+        clearAuthError: () => setAuthError(''),
         login: async (email, password) => saveSession(await api.login({ email, password })),
         register: async ({ email, password }) => {
           const response = await api.register({ email, password })
@@ -215,7 +231,10 @@ function LegacyAuthProvider({ children }) {
           if (!idToken) return null
           return saveSession(await api.firebaseSession({ idToken }))
         },
-        logout: async () => clearStoreSession({ revision, setUser, logout: api.logout, restore: restoreCookieSession }),
+        logout: async () => {
+          await clearStoreSession({ revision, setUser, logout: api.logout, restore: restoreCookieSession })
+          await firebaseSignOut()
+        },
         updateProfile: async (payload) => {
           const { data } = await api.updateProfile(payload)
           setUser(data.user)

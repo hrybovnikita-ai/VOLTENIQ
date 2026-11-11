@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AuthLayout from '../components/auth/AuthLayout'
@@ -6,11 +6,12 @@ import AuthPasswordField from '../components/auth/AuthPasswordField'
 import GoogleSignInButton from '../components/auth/GoogleSignInButton'
 import Button from '../components/ui/Button'
 import { safeRedirectPath } from '../utils/safeRedirect'
+import { clearAuthRedirect, peekAuthRedirect } from '../utils/purchaseIntent'
 
 const inputClass = 'auth-input'
 
 export default function SignupPage() {
-  const { register, loginWithGoogle, isAuthenticated, googleEnabled } = useAuth()
+  const { register, loginWithGoogle, isAuthenticated, googleEnabled, authError, clearAuthError } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [form, setForm] = useState({
@@ -21,14 +22,24 @@ export default function SignupPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
+  // Router state is lost across a full-page Google redirect; RequireAuth and
+  // checkout also save the destination in sessionStorage.
+  const [savedRedirect] = useState(() => peekAuthRedirect())
+  const shownError = error || authError
+
+  useEffect(() => {
+    if (isAuthenticated) clearAuthRedirect()
+  }, [isAuthenticated])
+
   if (isAuthenticated) {
-    const dest = safeRedirectPath(location.state?.from, '/')
+    const dest = safeRedirectPath(location.state?.from || savedRedirect, '/')
     return <Navigate to={dest} replace />
   }
 
   const onSubmit = async (e) => {
     e.preventDefault()
     setError('')
+    clearAuthError()
     if (form.password !== form.confirmPassword) {
       setError('Passwords do not match')
       return
@@ -109,10 +120,10 @@ export default function SignupPage() {
           minLength={8}
         />
 
-        {error ? (
+        {shownError ? (
           <p role="alert" className="text-sm text-red-400">
-            {error}
-            {/already registered|already exists/i.test(error) ? (
+            {shownError}
+            {/already registered|already exists/i.test(shownError) ? (
               <>
                 {' '}
                 <Link to="/login" state={location.state} className="text-volt font-semibold hover:underline">
@@ -140,6 +151,7 @@ export default function SignupPage() {
           onClick={async () => {
             setLoading(true)
             setError('')
+            clearAuthError()
             try {
               const user = await loginWithGoogle()
               if (!user) return

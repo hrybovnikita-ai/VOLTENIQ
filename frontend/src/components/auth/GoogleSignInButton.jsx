@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { currentEmbeddedBrowser, externalBrowserLinks } from '../../lib/firebaseAuthPolicy'
 
 function GoogleGlyph({ className = 'w-5 h-5' }) {
   return (
@@ -23,28 +24,100 @@ function GoogleGlyph({ className = 'w-5 h-5' }) {
   )
 }
 
-export default function GoogleSignInButton({ onClick, disabled, label = 'Continue with Google' }) {
+const APP_NAMES = {
+  telegram: 'Telegram',
+  instagram: 'Instagram',
+  facebook: 'Facebook',
+  tiktok: 'TikTok',
+  line: 'LINE',
+  snapchat: 'Snapchat',
+  linkedin: 'LinkedIn',
+  wechat: 'WeChat',
+  twitter: 'X',
+}
+
+function openInExternalBrowser(url, links, app) {
+  // Telegram Mini Apps / WebViews expose an API that opens the system browser.
+  try {
+    if (app === 'telegram' && window.Telegram?.WebApp?.openLink) {
+      window.Telegram.WebApp.openLink(url)
+      return true
+    }
+    if (app === 'telegram' && window.TelegramWebviewProxy?.postEvent) {
+      window.TelegramWebviewProxy.postEvent('web_app_open_link', JSON.stringify({ url }))
+      return true
+    }
+  } catch { /* Older Telegram clients: fall through to OS links. */ }
+  const target = links.android || links.ios
+  if (target) {
+    window.location.href = target
+    return true
+  }
+  return false
+}
+
+function EmbeddedBrowserNotice({ browser }) {
   const [showLink, setShowLink] = useState(false)
-  const browserUrl = new URL('/login', location.origin).href
-  const embedded = /Telegram|FBAN|FBAV|Instagram|; wv\)/i.test(navigator.userAgent) ||
-    Boolean(window.TelegramWebviewProxy || window.Telegram?.WebApp?.initData || /tgWebAppPlatform/i.test(location.hash))
-  if (embedded) return <div className="rounded-xl border border-silver/30 p-4 text-sm" role="note">
-    <strong>Open in Safari or Chrome to continue with Google</strong>
-    <button type="button" className="auth-google-btn w-full" onClick={() => {
-      try {
-        if (location.protocol === 'https:' && window.Telegram?.WebApp?.openLink) {
-          window.Telegram.WebApp.openLink(browserUrl)
-        } else if (location.protocol === 'https:' && window.TelegramWebviewProxy?.postEvent) {
-          window.TelegramWebviewProxy.postEvent('web_app_open_link', JSON.stringify({ url: browserUrl }))
-        }
-      } catch { /* Older Telegram clients can use the link below. */ }
-      setShowLink(true)
-    }}>Open sign-in in browser</button>
-    {showLink && <label>Paste this link in your browser
-      <input readOnly value={browserUrl} onFocus={event => event.target.select()} />
-    </label>}
-    <p>Your session will open in the external browser. Use this browser's menu and choose Open in Browser, or sign in with email here.</p>
-  </div>
+  const [copied, setCopied] = useState(false)
+  const url = useMemo(() => {
+    const next = new URL(window.location.href)
+    next.hash = ''
+    return next.href
+  }, [])
+  const links = useMemo(() => externalBrowserLinks(url, browser.platform), [url, browser.platform])
+  const appName = APP_NAMES[browser.app] || 'this app'
+  const browserName = browser.platform === 'ios' ? 'Safari' : browser.platform === 'android' ? 'Chrome' : 'your browser'
+
+  const copy = async () => {
+    setShowLink(true)
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+    } catch { /* Clipboard blocked: the visible field lets the user copy manually. */ }
+  }
+
+  return (
+    <div className="rounded-xl border border-silver/30 p-4 text-sm space-y-3" role="note" data-testid="embedded-browser-notice">
+      <p>
+        <strong>Google sign-in does not work inside {appName}.</strong>{' '}
+        Open this page in {browserName} to continue with Google, or sign in with email and password above.
+      </p>
+      <button
+        type="button"
+        className="auth-google-btn w-full"
+        onClick={() => {
+          if (!openInExternalBrowser(url, links, browser.app)) setShowLink(true)
+        }}
+      >
+        <GoogleGlyph />
+        <span>Open in {browserName}</span>
+      </button>
+      <button type="button" className="w-full text-volt font-semibold" onClick={copy}>
+        {copied ? 'Link copied' : 'Copy link'}
+      </button>
+      {showLink ? (
+        <label className="block">
+          <span className="block text-muted mb-1">Paste this link in {browserName}:</span>
+          <input
+            readOnly
+            className="auth-input"
+            value={url}
+            onFocus={(event) => event.target.select()}
+          />
+        </label>
+      ) : null}
+      <p className="text-muted">
+        {browser.app === 'telegram'
+          ? 'In Telegram, tap ⋮ or ··· and choose “Open in browser”.'
+          : 'Use the app menu (⋮ or ···) and choose “Open in browser”.'}
+      </p>
+    </div>
+  )
+}
+
+export default function GoogleSignInButton({ onClick, disabled, label = 'Continue with Google' }) {
+  const browser = useMemo(() => currentEmbeddedBrowser(), [])
+  if (browser.embedded) return <EmbeddedBrowserNotice browser={browser} />
   return (
     <button
       type="button"
