@@ -1,6 +1,13 @@
 import axios from 'axios'
 
-const API_URL = import.meta.env.VITE_API_URL || '/api'
+function resolveApiUrl() {
+  const raw = String(import.meta.env.VITE_API_URL || '').trim()
+  // Guard against Git Bash mangling `/api` into a Windows path when setting Vercel env.
+  if (!raw || /^[A-Za-z]:[\\/]/.test(raw) || raw.includes('Program Files')) return '/api'
+  return raw.replace(/\/$/, '') || '/api'
+}
+
+const API_URL = resolveApiUrl()
 
 export const http = axios.create({
   baseURL: API_URL,
