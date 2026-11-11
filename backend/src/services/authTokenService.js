@@ -123,11 +123,14 @@ export async function consumeAuthToken({ email, token, type }) {
     throw err;
   }
 
-  await prisma.authToken.update({
-    where: { id: row.id },
+  const claimed = await prisma.authToken.updateMany({
+    where: { id: row.id, usedAt: null, expiresAt: { gt: new Date() } },
     data: { usedAt: new Date() },
   });
 
+  if (claimed.count !== 1) {
+    throw Object.assign(new Error('This link has expired or has already been used.'), { status: 400 });
+  }
   return row.user;
 }
 

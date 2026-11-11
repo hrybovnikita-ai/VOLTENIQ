@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AuthLayout from '../components/auth/AuthLayout'
@@ -11,34 +11,25 @@ export default function VerifyEmailPage() {
   const emailParam = params.get('email') || ''
   const tokenParam = params.get('token') || ''
   const [email, setEmail] = useState(emailParam)
-  const [status, setStatus] = useState(tokenParam ? 'verifying' : 'idle')
+  const [status, setStatus] = useState('idle')
   const [error, setError] = useState('')
   const [info, setInfo] = useState(
     tokenParam ? '' : 'Enter the email you registered with to resend a verification link.'
   )
 
-  useEffect(() => {
-    let active = true
-    async function run() {
-      if (!emailParam || !tokenParam) return
-      try {
-        await verifyEmailCode({ email: emailParam, token: tokenParam })
-        if (!active) return
-        setStatus('done')
-        navigate('/', { replace: true })
-      } catch (err) {
-        if (!active) return
-        setStatus('error')
-        setError(err.message || 'Verification failed')
-      }
+  async function onVerify() {
+    setStatus('verifying')
+    setError('')
+    try {
+      await verifyEmailCode({ email: emailParam, token: tokenParam })
+      navigate('/', { replace: true })
+    } catch (err) {
+      setError(err.message || 'Verification failed')
+      setStatus('error')
     }
-    run()
-    return () => { active = false }
-  }, [emailParam, tokenParam, verifyEmailCode, navigate])
-
-  if (isAuthenticated && status !== 'verifying') {
-    return <Navigate to="/" replace />
   }
+
+  if (isAuthenticated && !tokenParam) return <Navigate to="/" replace />
 
   async function onResend(event) {
     event.preventDefault()
@@ -61,8 +52,13 @@ export default function VerifyEmailPage() {
       subtitle="Confirm ownership of your email before signing in with a password."
       footer={<Link className="text-volt font-semibold" to="/login">Back to Sign In</Link>}
     >
-      {status === 'verifying' ? (
-        <p role="status">Verifying your email…</p>
+      {tokenParam && emailParam && status !== 'error' ? (
+        <div className="space-y-4">
+          <p className="break-words">{emailParam}</p>
+          <Button onClick={onVerify} disabled={status === 'verifying'}>
+            {status === 'verifying' ? 'Verifying…' : 'Verify my email'}
+          </Button>
+        </div>
       ) : (
         <form className="space-y-4" onSubmit={onResend}>
           <label className="block text-sm" htmlFor="verify-email">
