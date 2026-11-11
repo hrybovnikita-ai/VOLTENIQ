@@ -1,8 +1,6 @@
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { prisma } from '../db/prisma.js';
-import { revokeAllUserSessions } from './sessionService.js';
-import { clearUserAuthTokens } from './authTokenService.js';
 
 function sanitize(user) {
   if (!user) return null;
@@ -260,25 +258,20 @@ export async function findOrCreateFirebaseUser({ firebaseUid, googleId, email, n
 
   async function reclaimUnverifiedPasswordAccount(user) {
     // Verified Google ownership of this exact email may reclaim an unverified password row.
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { password: GOOGLE_ONLY_PASSWORD },
-    });
-    await revokeAllUserSessions(user.id);
-    await clearUserAuthTokens(user.id);
-    const updated = await prisma.user.update({
-      where: {
-        id: user.id,
-        email: address,
-        AND: [{ firebaseUid: null }, { googleId: null }],
-      },
-      data: {
-        firebaseUid,
-        googleId,
-        emailVerifiedAt: new Date(),
-        ...(name && !user.name ? { name } : {}),
-      },
-    });
+    const [updated] = await prisma.$transaction([
+      prisma.user.update({
+        where: {
+          id: user.id, email: address, emailVerifiedAt: null,
+          AND: [{ firebaseUid: null }, { googleId: null }, { clerkId: null }],
+        },
+        data: {
+          password: GOOGLE_ONLY_PASSWORD, firebaseUid, googleId, emailVerifiedAt: new Date(),
+          ...(name && !user.name ? { name } : {}),
+        },
+      }),
+      prisma.session.deleteMany({ where: { userId: user.id } }),
+      prisma.authToken.deleteMany({ where: { userId: user.id } }),
+    ]);
     return sanitize(updated);
   }
 

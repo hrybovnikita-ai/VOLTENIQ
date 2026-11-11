@@ -1,3 +1,5 @@
+import { clearStoreSession } from './clearStoreSession'
+import { browserStorage } from '../utils/browserStorage'
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useAuth as useClerkAuth, useClerk } from '@clerk/react'
 import { api } from '../api/client'
@@ -10,40 +12,6 @@ const AuthContext = createContext(null)
 async function restoreCookieSession() {
   const { data } = await api.session()
   return data.user || null
-}
-
-/**
- * Clear the storefront cookie session and confirm the server no longer
- * recognizes it. Always clears local React state afterward.
- */
-async function clearStoreSession({ revision, setUser }) {
-  revision.current += 1
-  let serverError = null
-  try {
-    await api.logout()
-  } catch (error) {
-    serverError = error
-  }
-
-  let stillSignedIn = false
-  try {
-    const remaining = await restoreCookieSession()
-    stillSignedIn = Boolean(remaining)
-  } catch {
-    stillSignedIn = false
-  }
-
-  setUser(null)
-
-  if (stillSignedIn) {
-    const err = new Error(
-      serverError?.message
-        || 'Sign-out could not revoke the server session. Please try again.'
-    )
-    err.status = serverError?.status || 500
-    err.code = 'logout_session_persist'
-    throw err
-  }
 }
 
 function ClerkAuthProvider({ children }) {
@@ -64,12 +32,12 @@ function ClerkAuthProvider({ children }) {
     const token = await clerk.getToken()
     if (!token) throw new Error('Google session expired. Please sign in again.')
     return saveSession(await api.clerkSession({ token }))
-  }, [clerk.isSignedIn, clerk.getToken, saveSession])
+  }, [clerk, saveSession])
 
   useEffect(() => {
     const version = revision.current
     let active = true
-    localStorage.removeItem('volteniq_token')
+    browserStorage.removeItem('volteniq_token')
 
     async function bootstrap() {
       try {
@@ -134,16 +102,8 @@ function ClerkAuthProvider({ children }) {
   }
 
   async function logout() {
-    try {
-      await clearStoreSession({ revision, setUser })
-    } finally {
-      try {
-        if (clerk.isSignedIn) await clerkSdk.signOut({ redirectUrl: window.location.origin })
-      } catch {
-        // Store cookie session is already cleared.
-      }
-      setUser(null)
-    }
+    await clearStoreSession({ revision, setUser, logout: api.logout, restore: restoreCookieSession })
+    if (clerk.isSignedIn) await clerkSdk.signOut({ redirectUrl: window.location.origin })
   }
 
   async function updateProfileInfo(payload) {
@@ -189,13 +149,13 @@ function LegacyAuthProvider({ children }) {
   useEffect(() => {
     const version = revision.current
     let active = true
-    localStorage.removeItem('volteniq_token')
+    browserStorage.removeItem('volteniq_token')
 
     async function bootstrap() {
       try {
         // Complete Firebase redirect OAuth before restoring a cookie session.
         const redirectToken = firebaseConfigured
-          ? await consumeGoogleRedirectResult()
+          ? await consumeGoogleRedirectResult().catch(() => null)
           : null
         if (!active || version !== revision.current) return
 
@@ -235,7 +195,7 @@ function LegacyAuthProvider({ children }) {
         loading: false,
         isAuthenticated: Boolean(user),
         isAdmin: user?.role === 'ADMIN',
-        googleEnabled: import.meta.env.VITE_AUTH_PROVIDER !== 'clerk' && firebaseConfigured,
+        googleEnabled: firebaseConfigured,
         login: async (email, password) => saveSession(await api.login({ email, password })),
         register: async ({ email, password }) => {
           const response = await api.register({ email, password })
@@ -255,7 +215,7 @@ function LegacyAuthProvider({ children }) {
           if (!idToken) return null
           return saveSession(await api.firebaseSession({ idToken }))
         },
-        logout: async () => clearStoreSession({ revision, setUser }),
+        logout: async () => clearStoreSession({ revision, setUser, logout: api.logout, restore: restoreCookieSession }),
         updateProfile: async (payload) => {
           const { data } = await api.updateProfile(payload)
           setUser(data.user)
@@ -270,7 +230,7 @@ function LegacyAuthProvider({ children }) {
 }
 
 export function AuthProvider({ children }) {
-  if (isClerkEnabled) return <ClerkAuthProvider>{children}</ClerkAuthProvider>
+  if (isClerkEnabled && !firebaseConfigured) return <ClerkAuthProvider>{children}</ClerkAuthProvider>
   return <LegacyAuthProvider>{children}</LegacyAuthProvider>
 }
 

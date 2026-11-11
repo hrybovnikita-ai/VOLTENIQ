@@ -13,6 +13,11 @@ GRANT INSERT (id, name, email, password, "emailVerifiedAt", "googleId", "firebas
   UPDATE (name, password, "emailVerifiedAt", "googleId", "firebaseUid", "clerkId", "avatarUrl", "updatedAt") ON public."User" TO volteniq_runtime;
 GRANT INSERT, UPDATE, DELETE ON public."Product" TO volteniq_runtime;
 GRANT INSERT, DELETE ON public."Favorite", public."PriceAlert", public."Session", public."AuthToken" TO volteniq_runtime;
+GRANT SELECT, INSERT ON public."OrderStatusEvent" TO volteniq_runtime;
+GRANT SELECT, INSERT ON public."Cart" TO volteniq_runtime;
+GRANT UPDATE (items, version, "updatedAt") ON public."Cart" TO volteniq_runtime;
+GRANT UPDATE ("usedAt") ON public."AuthToken" TO volteniq_runtime;
+GRANT UPDATE ("lastSeenAt") ON public."Session" TO volteniq_runtime;
 GRANT INSERT ON public."Order", public."OrderItem", public."PriceHistory" TO volteniq_runtime;
 GRANT UPDATE (status, "updatedAt") ON public."Order" TO volteniq_runtime;
 DO $$

@@ -1,10 +1,11 @@
+import { browserStorage } from '../utils/browserStorage'
 import { createContext, useContext, useEffect, useState } from 'react'
 
 const ThemeContext = createContext(null)
 
 export function ThemeProvider({ children }) {
   const [theme, setTheme] = useState(() => {
-    const saved = localStorage.getItem('volteniq_theme')
+    const saved = browserStorage.getItem('volteniq_theme')
     if (saved) return saved
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   })
@@ -12,7 +13,7 @@ export function ThemeProvider({ children }) {
   useEffect(() => {
     const root = document.documentElement
     root.classList.toggle('dark', theme === 'dark')
-    localStorage.setItem('volteniq_theme', theme)
+    browserStorage.setItem('volteniq_theme', theme)
   }, [theme])
 
   const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))

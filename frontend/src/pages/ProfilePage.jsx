@@ -68,10 +68,9 @@ export default function ProfilePage() {
     setError('')
     try {
       await logout()
+      navigate('/login', { replace: true })
     } catch (err) {
       setError(err.message || 'Sign-out failed. Please try again.')
-    } finally {
-      navigate('/login', { replace: true })
     }
   }
 

@@ -57,8 +57,6 @@ function googleProvider() {
 function isPopupFailure(error) {
   return [
     'auth/popup-blocked',
-    'auth/popup-closed-by-user',
-    'auth/cancelled-popup-request',
   ].includes(error?.code)
 }
 
@@ -72,8 +70,14 @@ async function idTokenFromUser(user) {
  * Continue a Google redirect that returned to this origin.
  * Returns an ID token string, or null when no redirect is pending.
  */
-export async function consumeGoogleRedirectResult() {
-  if (!firebaseConfigured) return null
+let pendingRedirect
+export function consumeGoogleRedirectResult() {
+  // StrictMode can mount twice. Both consumers need the same one-shot result.
+  return pendingRedirect ??= readGoogleRedirectResult()
+}
+
+async function readGoogleRedirectResult() {
+  if (!firebaseConfigured || firebaseConfig.authDomain !== window.location.host) return null
   const result = await getRedirectResult(getFirebaseAuth())
   if (!result?.user) return null
   return idTokenFromUser(result.user)
@@ -94,7 +98,8 @@ export async function googleIdToken() {
   const preferRedirect = typeof navigator !== 'undefined'
     ? shouldPreferGoogleRedirect(navigator.userAgent, navigator.platform, navigator.maxTouchPoints)
     : false
-  if (preferRedirect) {
+  const redirectSupported = firebaseConfig.authDomain === window.location.host
+  if (preferRedirect && redirectSupported) {
     await signInWithRedirect(instance, provider)
     return null
   }
@@ -103,10 +108,10 @@ export async function googleIdToken() {
     const result = await signInWithPopup(instance, provider)
     return idTokenFromUser(result.user)
   } catch (error) {
-    if (isPopupFailure(error)) {
+    if (isPopupFailure(error) && redirectSupported) {
       await signInWithRedirect(instance, provider)
       return null
     }
-    throw new Error(mapFirebaseAuthError(error))
+    throw new Error(mapFirebaseAuthError(error), { cause: error })
   }
 }

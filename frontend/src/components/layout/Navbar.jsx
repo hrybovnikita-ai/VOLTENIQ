@@ -38,6 +38,7 @@ function initials(user) {
 export default function Navbar() {
   const [open, setOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
+  const [logoutError, setLogoutError] = useState('')
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
   const { count } = useCart()
@@ -47,15 +48,16 @@ export default function Navbar() {
 
   const handleSignOut = async () => {
     if (signingOut) return
+    setLogoutError('')
     setSigningOut(true)
     try {
       await logout()
-    } catch {
-      // Local session is cleared even when the network call fails; still leave auth screens.
-    } finally {
       setOpen(false)
-      setSigningOut(false)
       navigate('/login', { replace: true })
+    } catch (error) {
+      setLogoutError(error.message || 'Sign-out failed. Please try again.')
+    } finally {
+      setSigningOut(false)
     }
   }
 
@@ -98,6 +100,7 @@ export default function Navbar() {
 
   return (
     <header className="sticky top-0 z-50">
+      {logoutError && <p role="alert">{logoutError}</p>}
       <div className="glass-nav backdrop-blur-xl">
         <div className="container-shell">
           <div className="flex h-14 sm:h-16 items-center gap-2 sm:gap-3 min-w-0">

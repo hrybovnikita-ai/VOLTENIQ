@@ -23,6 +23,7 @@ import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
 import SsoCallbackPage from './pages/SsoCallbackPage'
 import { isClerkEnabled } from './lib/clerk'
+import { firebaseConfigured } from './lib/firebase'
 import ProfilePage from './pages/ProfilePage'
 import AdminPage from './pages/AdminPage'
 import AssistantPage from './pages/AssistantPage'
@@ -41,7 +42,7 @@ export default function App() {
                   <Route path="verify-email" element={<Suspense fallback={<p role="status">Loading…</p>}><VerifyEmailPage /></Suspense>} />
                   <Route path="login" element={<LoginPage />} />
                   <Route path="signup" element={<SignupPage />} />
-                  {isClerkEnabled ? <Route path="sso-callback" element={<SsoCallbackPage />} /> : null}
+                  {isClerkEnabled && !firebaseConfigured ? <Route path="sso-callback" element={<SsoCallbackPage />} /> : null}
                   <Route element={<Layout />}>
                     <Route index element={<HomePage />} />
                     <Route path="catalog" element={<CatalogPage />} />

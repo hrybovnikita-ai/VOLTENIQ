@@ -21,7 +21,11 @@ test('resolveApiUrl collapses same-origin absolute API hosts to /api', () => {
 
 test('resolveApiUrl keeps cross-origin absolute API hosts', () => {
   assert.equal(
-    resolveApiUrl('https://api.example.com/api', 'https://volteniq.vercel.app'),
+    resolveApiUrl('https://api.example.com/api', 'https://shop.example.com'),
     'https://api.example.com/api'
   )
+})
+
+test('Vercel aliases use the first-party API rewrite', () => {
+  assert.equal(resolveApiUrl('https://api.example.com/api', 'https://preview.vercel.app'), '/api')
 })

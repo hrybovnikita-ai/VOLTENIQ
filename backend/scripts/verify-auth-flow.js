@@ -55,24 +55,20 @@ try {
     method: 'POST',
     body: { email, password },
   });
-  if (registered.status === 201 && registered.payload?.data?.user?.email === email) {
-    pass('register creates account', `userId=${registered.payload.data.user.id}`);
-  } else {
-    fail('register creates account', `status=${registered.status}`);
+  if (registered.status !== 201 || !registered.payload?.data?.needsVerification || registered.cookie) {
+    throw new Error('Registration must require verification before issuing a session.');
   }
-
-  if (!registered.payload?.data?.token) pass('register does not return JWT token');
-  else fail('register does not return JWT token');
-
-  if (!('password' in (registered.payload?.data?.user || {}))) pass('register response hides password hash');
-  else fail('register response hides password hash');
-
-  const sessionHeader = findSessionCookie(registered.setCookie);
-  if (sessionHeader && /HttpOnly/i.test(sessionHeader) && /SameSite=Lax/i.test(sessionHeader) && /Max-Age=2592000/i.test(sessionHeader)) {
-    pass('register sets 30-day HttpOnly SameSite=Lax cookie');
-  } else {
-    fail('register sets 30-day HttpOnly SameSite=Lax cookie', String(sessionHeader || 'missing'));
+  pass('registration requires email verification and sets no cookie');
+  const blocked = await request('/api/auth/login', { method: 'POST', body: { email, password } });
+  if (blocked.payload.code !== 'email_unverified') throw new Error('Unverified login was not rejected.');
+  const token = registered.payload.data.token;
+  if (!token) throw new Error('Run this fixture against a local test API with AUTH_TEST_RETURN_TOKEN=1.');
+  const verified = await request('/api/auth/verify-email', { method: 'POST', body: { email, token } });
+  const sessionHeader = findSessionCookie(verified.setCookie);
+  if (verified.status !== 200 || !/HttpOnly/i.test(sessionHeader) || !/SameSite=Lax/i.test(sessionHeader)) {
+    throw new Error('Verification failed to establish a storefront session.');
   }
+  pass('email verification issues an HttpOnly SameSite=Lax session');
 
   const dbUser = await prisma.user.findUnique({ where: { email } });
   if (dbUser && await bcrypt.compare(password, dbUser.password)) {
@@ -81,7 +77,7 @@ try {
     fail('password stored as bcrypt hash in PostgreSQL');
   }
 
-  const me = await request('/api/auth/me', { cookie: registered.cookie });
+  const me = await request('/api/auth/me', { cookie: verified.cookie });
   if (me.status === 200 && me.payload?.data?.user?.email === email) {
     pass('auto sign-in session restores via /api/auth/me');
   } else {
@@ -99,7 +95,7 @@ try {
   }
 
   // Simulate browser restart: reuse only the cookie header, no in-memory auth state.
-  const restored = await request('/api/auth/me', { cookie: registered.cookie });
+  const restored = await request('/api/auth/me', { cookie: verified.cookie });
   if (restored.status === 200 && restored.payload?.data?.user?.id === dbUser.id) {
     pass('session survives simulated browser restart');
   } else {
@@ -155,9 +151,9 @@ try {
 
   const logout = await request('/api/auth/logout', {
     method: 'POST',
-    cookie: login.cookie || registered.cookie,
+    cookie: login.cookie || verified.cookie,
   });
-  const meAfter = await request('/api/auth/me', { cookie: login.cookie || registered.cookie });
+  const meAfter = await request('/api/auth/me', { cookie: login.cookie || verified.cookie });
   if (logout.status === 200 && meAfter.status === 401) {
     pass('logout revokes session');
   } else {

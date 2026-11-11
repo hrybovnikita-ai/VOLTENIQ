@@ -13,6 +13,7 @@ export function resolveApiUrl(rawEnv, locationOrigin = '') {
     try {
       const api = new URL(normalized)
       const page = new URL(locationOrigin)
+      if (page.hostname.endsWith('.vercel.app') && api.origin !== page.origin) return '/api'
       if (api.origin === page.origin) return `${api.pathname.replace(/\/$/, '') || '/api'}`
     } catch {
       return '/api'

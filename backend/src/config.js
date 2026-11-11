@@ -90,6 +90,6 @@ export const config = {
     || process.env.VITE_CLERK_PROXY_URL
     || 'https://volteniq.vercel.app/__clerk'
   ).replace(/\/$/, ''),
-  firebaseEnabled: (process.env.AUTH_PROVIDER || 'firebase') === 'firebase' && Boolean(process.env.FIREBASE_PROJECT_ID),
+  firebaseEnabled: Boolean(process.env.FIREBASE_PROJECT_ID),
   clerkEnabled: process.env.AUTH_PROVIDER === 'clerk' && Boolean(process.env.CLERK_SECRET_KEY),
 };

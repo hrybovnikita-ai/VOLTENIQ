@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 function GoogleGlyph({ className = 'w-5 h-5' }) {
   return (
     <svg className={className} viewBox="0 0 48 48" aria-hidden="true">
@@ -22,11 +24,26 @@ function GoogleGlyph({ className = 'w-5 h-5' }) {
 }
 
 export default function GoogleSignInButton({ onClick, disabled, label = 'Continue with Google' }) {
+  const [showLink, setShowLink] = useState(false)
+  const browserUrl = new URL('/login', location.origin).href
   const embedded = /Telegram|FBAN|FBAV|Instagram|; wv\)/i.test(navigator.userAgent) ||
     Boolean(window.TelegramWebviewProxy || window.Telegram?.WebApp?.initData || /tgWebAppPlatform/i.test(location.hash))
   if (embedded) return <div className="rounded-xl border border-silver/30 p-4 text-sm" role="note">
     <strong>Open in Safari or Chrome to continue with Google</strong>
-    <p>Use this browser's menu and choose Open in Browser, or sign in with email here.</p>
+    <button type="button" className="auth-google-btn w-full" onClick={() => {
+      try {
+        if (location.protocol === 'https:' && window.Telegram?.WebApp?.openLink) {
+          window.Telegram.WebApp.openLink(browserUrl)
+        } else if (location.protocol === 'https:' && window.TelegramWebviewProxy?.postEvent) {
+          window.TelegramWebviewProxy.postEvent('web_app_open_link', JSON.stringify({ url: browserUrl }))
+        }
+      } catch { /* Older Telegram clients can use the link below. */ }
+      setShowLink(true)
+    }}>Open sign-in in browser</button>
+    {showLink && <label>Paste this link in your browser
+      <input readOnly value={browserUrl} onFocus={event => event.target.select()} />
+    </label>}
+    <p>Your session will open in the external browser. Use this browser's menu and choose Open in Browser, or sign in with email here.</p>
   </div>
   return (
     <button

@@ -25,7 +25,7 @@ let child, origin, sessionCookie = '';
 async function start() {
   child = spawn(process.execPath, ['--input-type=module', '-e',
     "import app from './src/app.js'; const s=app.listen(0,'127.0.0.1',()=>process.send(s.address().port));"],
-    { env: { ...process.env, DATABASE_URL: pgUrl.href, MONGODB_URI: mongoUrl.href, DEMO_MODE: 'false' },
+    { env: { ...process.env, DATABASE_URL: pgUrl.href, MONGODB_URI: mongoUrl.href, DEMO_MODE: 'false', NODE_ENV: 'test', AUTH_TEST_RETURN_TOKEN: '1' },
       stdio: ['ignore','ignore','ignore','ipc'] });
   const port = await Promise.race([once(child,'message').then(([port]) => port),
     once(child,'exit').then(() => { throw new Error('Test API exited before startup'); }),
@@ -75,7 +75,9 @@ try {
   await store.collection('categories').findOne({});
   await start();
   const suffix = randomUUID(), credentials = { email: suffix+'@example.test', password: randomUUID() };
-  await request('/auth/register','POST',201,credentials);
+  const registration = await request('/auth/register','POST',201,credentials);
+  await request('/auth/login','POST',401,credentials);
+  await request('/auth/verify-email','POST',200,{email:credentials.email,token:registration.data.token});
   await request('/auth/register','POST',409,credentials);
   sessionCookie = '';
   const { data: { user } } = await request('/auth/login','POST',200,credentials);
@@ -92,17 +94,22 @@ try {
   await request('/cart','PUT',409,{items:[],version:0},true);
   const {data:{order}}=await request('/orders','POST',201,{items:lines,shipping:{name:'QA',address:'Test',city:'Test',zip:'00000'}},true);
   assert.equal(order.total,25);
+  // Checkout clears the purchased cart. Save a fresh cart to test restart persistence.
+  const afterCheckout = await request('/cart','GET',200,null,true);
+  assert.deepEqual(afterCheckout.data.items, []);
+  const saved = await request('/cart','PUT',200,{items:[{...lines[0], quantity:1}],version:afterCheckout.data.version},true);
   const persistedCookie = sessionCookie;
   await stop();
   await start();
   sessionCookie = persistedCookie;
   assert.equal((await request('/auth/me','GET',200,null,true)).data.user.id,user.id);
-  assert.deepEqual((await request('/cart','GET',200,null,true)).data.items,lines);
+  const restoredCart = await request('/cart','GET',200,null,true);
+  assert.deepEqual(restoredCart.data.items.map(({productId,quantity,selection}) => ({productId,quantity,selection})),[{...lines[0],quantity:1}]);
   assert((await request('/favorites','GET',200,null,true)).data.favorites.some(f=>f.productId===product.id));
   assert.equal((await request('/orders/'+order.id,'GET',200,null,true)).data.order.total,25);
   assert.equal((await pg.product.findUniqueOrThrow({where:{id:product.id}})).stock,1);
   assert.equal((await request('/favorites/toggle','POST',200,favorite(product.id),true)).data.favorited,false);
-  await request('/cart','PUT',200,{items:[],version:1},true);
+  await request('/cart','PUT',200,{items:[],version:saved.data.version},true);
   await request('/admin/stats','GET',403,null,true);
   console.log('PASS restricted roles, favorites validation, signup/login, cart conflicts, checkout, restart, persistence and authorization.');
 } finally {
