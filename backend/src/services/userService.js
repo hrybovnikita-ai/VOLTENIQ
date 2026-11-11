@@ -287,7 +287,9 @@ export async function findOrCreateFirebaseUser({ firebaseUid, googleId, email, n
     if (user.googleId && user.googleId !== googleId && !legacy) {
       throw identityConflict('Account identity conflict. Use your original sign-in method or verify your email.');
     }
-    if (user.clerkId && !user.googleId && !user.firebaseUid) {
+    // Clerk-only rows may link only when their email ownership was already
+    // verified; Google now proves ownership of the same address.
+    if (user.clerkId && !user.googleId && !user.firebaseUid && !user.emailVerifiedAt) {
       throw identityConflict('Account identity conflict. Use your original sign-in method or verify your email.');
     }
 
