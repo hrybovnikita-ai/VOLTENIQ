@@ -200,8 +200,8 @@ router.get(
       success: true,
       data: {
         clerk: config.clerkEnabled,
-        firebase: Boolean(config.firebaseProjectId) && !config.clerkEnabled,
-        google: config.clerkEnabled || Boolean(config.firebaseProjectId),
+        firebase: config.firebaseEnabled,
+        google: config.clerkEnabled || config.firebaseEnabled,
         mailConfigured: isMailConfigured(),
         projectId: config.firebaseProjectId || null,
       },
@@ -215,6 +215,7 @@ router.post(
   [body('token').notEmpty().withMessage('Clerk session token required')],
   validate,
   asyncHandler(async (req, res) => {
+    if (!config.clerkEnabled) return res.status(410).json({ message: 'Clerk sign-in is disabled.' });
     const claims = await verifyClerkSessionToken(req.body.token);
     const user = await findOrCreateClerkUser({
       clerkId: claims.clerkId,
@@ -240,15 +241,16 @@ router.post(
   [body('idToken').notEmpty().withMessage('Firebase ID token required')],
   validate,
   asyncHandler(async (req, res) => {
-    if (config.clerkEnabled) {
+    if (!config.firebaseEnabled) {
       return res.status(410).json({
         success: false,
-        message: 'Firebase sign-in is disabled. Continue with Google through Clerk instead.',
+        message: 'Firebase sign-in is unavailable.',
       });
     }
     const claims = await verifyFirebaseIdToken(req.body.idToken);
     const user = await findOrCreateFirebaseUser({
       firebaseUid: claims.uid,
+      googleId: claims.googleId,
       email: claims.email,
       name: claims.name || nameFromEmail(claims.email),
       signInProvider: claims.signInProvider,

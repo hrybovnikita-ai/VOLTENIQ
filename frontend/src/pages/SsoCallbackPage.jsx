@@ -38,7 +38,7 @@ export default function SsoCallbackPage() {
           : Promise.reject(new Error('No active Google session. Please try again.')))
         : clerk.handleRedirectCallback({
           signInUrl: '/login',
-          signUpUrl: '/login',
+          signUpUrl: '/signup',
           signInForceRedirectUrl: destination,
           signUpForceRedirectUrl: destination,
           continueSignUpUrl: destination,

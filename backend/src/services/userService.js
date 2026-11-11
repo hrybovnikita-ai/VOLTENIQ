@@ -118,70 +118,12 @@ function identityConflict(message) {
   return err;
 }
 
-/**
- * After Google OAuth proves control of the email (and Google subject when present),
- * an existing store row may adopt a newer Clerk user id. Blind email-only merges
- * without that proof remain rejected.
- */
-function canAdoptClerkId(existing, { clerkId, googleId, googleVerified }) {
-  if (!existing.clerkId || existing.clerkId === clerkId) return true;
-  if (!googleVerified || !googleId) return false;
-  if (existing.googleId && existing.googleId !== googleId) return false;
-  return true;
-}
-
 function profilePatch(existing, { name, googleId, avatarUrl }) {
   const patch = {};
   if (name && !existing.name) patch.name = name;
   if (googleId && !existing.googleId) patch.googleId = googleId;
   if (avatarUrl) patch.avatarUrl = avatarUrl;
   return patch;
-}
-
-async function invalidatePasswordCredentials(userId) {
-  await prisma.user.update({
-    where: { id: userId },
-    data: { password: GOOGLE_ONLY_PASSWORD },
-  });
-}
-
-/**
- * Reclaim an unverified password account after Google proves email ownership.
- * Invalidates the squatter password and all sessions; never merges by email alone.
- */
-async function reclaimUnverifiedPasswordAccount(existing, {
-  clerkId,
-  googleId,
-  name,
-  avatarUrl,
-}) {
-  if (!googleId) {
-    throw identityConflict('Verified Google identity is required to reclaim this account');
-  }
-  if (existing.googleId && existing.googleId !== googleId) {
-    throw identityConflict('This Google account does not match the linked store account');
-  }
-
-  const taken = await findUserByClerkId(clerkId);
-  if (taken && taken.id !== existing.id) {
-    throw identityConflict('This Clerk account is already linked to a different store user');
-  }
-
-  await invalidatePasswordCredentials(existing.id);
-  await revokeAllUserSessions(existing.id);
-  await clearUserAuthTokens(existing.id);
-
-  const updated = await prisma.user.update({
-    where: { id: existing.id },
-    data: {
-      clerkId,
-      googleId,
-      emailVerifiedAt: new Date(),
-      ...(name && !existing.name ? { name } : {}),
-      ...(avatarUrl ? { avatarUrl } : {}),
-    },
-  });
-  return sanitize(updated);
 }
 
 async function attachClerkIdentity(existing, {
@@ -205,23 +147,8 @@ async function attachClerkIdentity(existing, {
     throw identityConflict('This Google account does not match the linked store account');
   }
 
-  // Unverified password accounts can be reclaimed only with matching Google proof.
-  if (!existing.emailVerifiedAt && !existing.googleId) {
-    return reclaimUnverifiedPasswordAccount(existing, {
-      clerkId,
-      googleId,
-      name,
-      avatarUrl,
-    });
-  }
-
-  if (!canAdoptClerkId(existing, { clerkId, googleId, googleVerified })) {
-    throw identityConflict('This email is already linked to another Clerk account');
-  }
-
-  const taken = await findUserByClerkId(clerkId);
-  if (taken && taken.id !== existing.id) {
-    throw identityConflict('This Clerk account is already linked to a different store user');
+  if ((!existing.emailVerifiedAt && existing.googleId !== googleId) || (existing.clerkId && existing.clerkId !== clerkId)) {
+    throw identityConflict('Verify your email or use the original linked identity.');
   }
 
   const data = {
@@ -232,7 +159,7 @@ async function attachClerkIdentity(existing, {
   if (existing.clerkId !== clerkId) data.clerkId = clerkId;
 
   const updated = await prisma.user.update({
-    where: { id: existing.id },
+    where: { id: existing.id, AND: [{ clerkId: existing.clerkId }, { googleId: existing.googleId }] },
     data,
   });
   return sanitize(updated);
@@ -271,6 +198,7 @@ export async function findOrCreateClerkUser({
     if (existingByClerk.email.toLowerCase() !== email.toLowerCase()) {
       throw identityConflict('This Clerk account is already linked to a different email');
     }
+    if (existingByClerk.googleId && googleId && existingByClerk.googleId !== googleId) throw identityConflict('Google identity conflict');
     const data = {
       ...profilePatch(existingByClerk, { name, googleId, avatarUrl }),
     };
@@ -280,7 +208,7 @@ export async function findOrCreateClerkUser({
     }
     if (!Object.keys(data).length) return sanitize(existingByClerk);
     const updated = await prisma.user.update({
-      where: { id: existingByClerk.id },
+      where: { id: existingByClerk.id, AND: [{ googleId: existingByClerk.googleId }] },
       data,
     });
     return sanitize(updated);
@@ -324,75 +252,118 @@ export async function findOrCreateClerkUser({
   }
 }
 
-export async function findOrCreateFirebaseUser({
-  firebaseUid,
-  email,
-  name,
-  signInProvider = null,
-  emailVerified = false,
-}) {
-  if (!firebaseUid || !email) {
-    const err = new Error('Firebase account email is required');
-    err.status = 400;
-    throw err;
+export async function findOrCreateFirebaseUser({ firebaseUid, googleId, email, name, signInProvider, emailVerified }) {
+  if (!firebaseUid || !googleId || !email || signInProvider !== 'google.com' || emailVerified !== true) {
+    throw Object.assign(new Error('Verified Google identity is required'), { status: 401 });
   }
+  const address = email.trim().toLowerCase();
 
-  // Require Google + verified email claim from the IdP — never mark verified from firebaseUid alone.
-  const googleOwnsEmail = signInProvider === 'google.com' && emailVerified === true;
-  if (!googleOwnsEmail) {
-    const err = new Error('Verified Google email ownership is required to continue');
-    err.status = 401;
-    throw err;
-  }
-
-  let user = await findUserByFirebaseUid(firebaseUid);
-  if (!user) {
-    user = await findUserByGoogleId(firebaseUid);
-  }
-  if (!user) {
-    const byEmail = await findUserByEmail(email);
-    if (byEmail) {
-      if (byEmail.googleId && byEmail.googleId !== firebaseUid) {
-        throw identityConflict('This Google account does not match the linked store account');
-      }
-      const updated = await prisma.user.update({
-        where: { id: byEmail.id },
-        data: {
-          firebaseUid,
-          googleId: byEmail.googleId || firebaseUid,
-          // Provider JWT proved ownership of this exact email.
-          emailVerifiedAt: byEmail.emailVerifiedAt || new Date(),
-          ...(name ? { name } : {}),
-        },
-      });
-      return sanitize(updated);
-    }
-  }
-
-  if (user) {
-    if (user.email.toLowerCase() !== email.toLowerCase()) {
-      throw identityConflict('This Firebase account is already linked to a different email');
-    }
-    const updated = await prisma.user.update({
+  async function reclaimUnverifiedPasswordAccount(user) {
+    // Verified Google ownership of this exact email may reclaim an unverified password row.
+    await prisma.user.update({
       where: { id: user.id },
+      data: { password: GOOGLE_ONLY_PASSWORD },
+    });
+    await revokeAllUserSessions(user.id);
+    await clearUserAuthTokens(user.id);
+    const updated = await prisma.user.update({
+      where: {
+        id: user.id,
+        email: address,
+        AND: [{ firebaseUid: null }, { googleId: null }],
+      },
       data: {
         firebaseUid,
-        googleId: user.googleId || firebaseUid,
-        emailVerifiedAt: user.emailVerifiedAt || new Date(),
-        ...(name ? { name } : {}),
+        googleId,
+        emailVerifiedAt: new Date(),
+        ...(name && !user.name ? { name } : {}),
       },
     });
     return sanitize(updated);
   }
 
-  return createUser({
-    name: name || email.split('@')[0],
-    email,
-    password: null,
-    googleId: firebaseUid,
-    firebaseUid,
-    emailVerifiedAt: new Date(),
-  });
+  async function attach(user) {
+    // Older Firebase accounts stored the Firebase UID in googleId. Preserve that binding.
+    const legacy = user.firebaseUid === firebaseUid && user.googleId === firebaseUid;
+    if (user.email !== address) {
+      throw identityConflict('Account identity conflict. Use your original sign-in method or verify your email.');
+    }
+    if (user.firebaseUid && user.firebaseUid !== firebaseUid) {
+      throw identityConflict('Account identity conflict. Use your original sign-in method or verify your email.');
+    }
+    if (user.googleId && user.googleId !== googleId && !legacy) {
+      throw identityConflict('Account identity conflict. Use your original sign-in method or verify your email.');
+    }
+    if (user.clerkId && !user.googleId && !user.firebaseUid) {
+      throw identityConflict('Account identity conflict. Use your original sign-in method or verify your email.');
+    }
+
+    // Unverified password-only accounts: reclaim with matching Google proof (never email-only merge).
+    if (!user.emailVerifiedAt && !user.googleId && !user.firebaseUid) {
+      try {
+        return await reclaimUnverifiedPasswordAccount(user);
+      } catch (error) {
+        if (error.code === 'P2025') {
+          throw identityConflict('The account is linked to a different identity.');
+        }
+        throw error;
+      }
+    }
+
+    if (!user.emailVerifiedAt && user.firebaseUid !== firebaseUid && user.googleId !== googleId) {
+      throw identityConflict('Account identity conflict. Use your original sign-in method or verify your email.');
+    }
+
+    try {
+      const updated = await prisma.user.update({
+        where: {
+          id: user.id,
+          email: address,
+          AND: [
+            { firebaseUid: user.firebaseUid },
+            { googleId: user.googleId },
+            { clerkId: user.clerkId },
+          ],
+        },
+        data: {
+          firebaseUid,
+          googleId: user.googleId || googleId,
+          emailVerifiedAt: user.emailVerifiedAt || new Date(),
+          ...(name && !user.name ? { name } : {}),
+        },
+      });
+      return sanitize(updated);
+    } catch (error) {
+      if (['P2002', 'P2025'].includes(error.code)) {
+        const linked = await findUserByFirebaseUid(firebaseUid);
+        if (linked?.email === address && [googleId, firebaseUid].includes(linked.googleId)) {
+          return sanitize(linked);
+        }
+        throw identityConflict('The account is linked to a different identity.');
+      }
+      throw error;
+    }
+  }
+
+  const existing = await findUserByFirebaseUid(firebaseUid)
+    || await findUserByGoogleId(googleId)
+    || await findUserByEmail(address);
+  if (existing) return attach(existing);
+
+  try {
+    return await createUser({
+      name: name || address.split('@')[0],
+      email: address,
+      firebaseUid,
+      googleId,
+      emailVerifiedAt: new Date(),
+    });
+  } catch (error) {
+    if (error.status !== 409) throw error;
+    const concurrent = await findUserByEmail(address);
+    if (concurrent) return attach(concurrent);
+    throw error;
+  }
 }
 
 const DUMMY_PASSWORD_HASH = bcrypt.hashSync('volteniq-timing-pad', 10);

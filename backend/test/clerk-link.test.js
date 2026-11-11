@@ -19,6 +19,7 @@ test('Clerk sync rejects email-only merges and requires verified Google ownershi
     email,
     password,
     name: 'Existing Member',
+    emailVerifiedAt: new Date(),
   });
 
   await assert.rejects(
@@ -76,7 +77,7 @@ test('Clerk sync rejects email-only merges and requires verified Google ownershi
   await prisma.user.deleteMany({ where: { email } }).catch(() => {});
 });
 
-test('verified Google ownership may adopt a newer Clerk user id without duplicating the store row', async () => {
+test('a conflicting Clerk ID cannot replace an existing binding', async () => {
   const email = `clerk_google_${randomUUID()}@example.test`;
   const password = `Pass_${randomUUID().slice(0, 8)}`;
   const googleId = `g_${randomUUID().replace(/-/g, '')}`;
@@ -116,29 +117,18 @@ test('verified Google ownership may adopt a newer Clerk user id without duplicat
     (error) => error.status === 409
   );
 
-  const relinked = await findOrCreateClerkUser({
-    clerkId: clerkIdB,
-    email,
-    name: 'Google Member',
-    emailVerified: true,
-    googleVerified: true,
-    googleId,
-    avatarUrl: 'https://img.example/avatar.png',
-  });
-
-  assert.equal(relinked.id, created.id);
-  assert.equal(relinked.email, email);
-
+  await assert.rejects(() => findOrCreateClerkUser({
+    clerkId: clerkIdB, email, emailVerified: true, googleVerified: true, googleId,
+  }), { status: 409 });
   const row = await findUserByEmail(email);
-  assert.equal(row.clerkId, clerkIdB);
+  assert.equal(row.id, created.id);
+  assert.equal(row.clerkId, clerkIdA);
   assert.equal(row.googleId, googleId);
-  assert.equal(await prisma.user.count({ where: { email } }), 1);
-  assert.equal(await prisma.user.count({ where: { clerkId: clerkIdA } }), 0);
 
   await prisma.user.deleteMany({ where: { email } }).catch(() => {});
 });
 
-test('returning Google users are found by googleId even when Clerk user id changed', async () => {
+test('returning Clerk users retain their existing binding', async () => {
   const email = `clerk_gid_${randomUUID()}@example.test`;
   const googleId = `g_${randomUUID().replace(/-/g, '')}`;
   const clerkIdA = `user_${randomUUID().replace(/-/g, '')}`;
@@ -154,7 +144,7 @@ test('returning Google users are found by googleId even when Clerk user id chang
   });
 
   const restored = await findOrCreateClerkUser({
-    clerkId: clerkIdB,
+    clerkId: clerkIdA,
     email,
     name: 'Returning Google',
     emailVerified: true,
@@ -164,7 +154,7 @@ test('returning Google users are found by googleId even when Clerk user id chang
 
   assert.equal(restored.id, created.id);
   const row = await findUserByEmail(email);
-  assert.equal(row.clerkId, clerkIdB);
+  assert.equal(row.clerkId, clerkIdA);
   assert.equal(row.googleId, googleId);
 
   await prisma.user.deleteMany({ where: { email } }).catch(() => {});

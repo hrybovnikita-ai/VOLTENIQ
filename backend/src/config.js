@@ -75,11 +75,11 @@ export const config = {
   mailFrom: process.env.MAIL_FROM || '',
   resendApiKey: process.env.RESEND_API_KEY || '',
   smtpUrl: process.env.SMTP_URL || '',
-  authTestReturnToken: String(process.env.AUTH_TEST_RETURN_TOKEN || '').toLowerCase() === '1',
+  authTestReturnToken: !isVercelRuntime && process.env.NODE_ENV !== 'production' && String(process.env.AUTH_TEST_RETURN_TOKEN || '').toLowerCase() === '1',
   databaseUrl: process.env.DATABASE_URL,
   databaseUrlUnpooled: process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL,
   neonBranch: process.env.NEON_BRANCH || null,
-  firebaseProjectId: process.env.FIREBASE_PROJECT_ID || 'volteniq',
+  firebaseProjectId: process.env.FIREBASE_PROJECT_ID || '',
   clerkSecretKey: process.env.CLERK_SECRET_KEY || '',
   clerkPublishableKey:
     process.env.CLERK_PUBLISHABLE_KEY
@@ -90,5 +90,6 @@ export const config = {
     || process.env.VITE_CLERK_PROXY_URL
     || 'https://volteniq.vercel.app/__clerk'
   ).replace(/\/$/, ''),
-  clerkEnabled: Boolean(process.env.CLERK_SECRET_KEY),
+  firebaseEnabled: (process.env.AUTH_PROVIDER || 'firebase') === 'firebase' && Boolean(process.env.FIREBASE_PROJECT_ID),
+  clerkEnabled: process.env.AUTH_PROVIDER === 'clerk' && Boolean(process.env.CLERK_SECRET_KEY),
 };

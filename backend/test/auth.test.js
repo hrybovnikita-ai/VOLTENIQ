@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 
+process.env.AUTH_PROVIDER = 'firebase';
+process.env.FIREBASE_PROJECT_ID = 'volteniq-test';
 process.env.AUTH_TEST_RETURN_TOKEN = '1';
 
 const { default: app } = await import('../src/app.js');
@@ -63,6 +65,9 @@ async function registerAndVerify(request, email, password) {
   const token = registered.payload.data.token;
   assert.ok(token);
 
+  const before = await prisma.user.findUnique({ where: { email } });
+  assert.equal(before.emailVerifiedAt, null);
+
   const unverifiedLogin = await request('/api/auth/login', {
     method: 'POST',
     body: { email, password },
@@ -77,8 +82,31 @@ async function registerAndVerify(request, email, password) {
   assert.equal(verified.response.status, 200);
   assert.ok(sessionCookie(verified.setCookie));
   assert.ok(verified.payload.data.user.emailVerifiedAt);
+  assert.equal(verified.payload.data.user.emailVerified, true);
+
+  const after = await prisma.user.findUnique({ where: { email } });
+  assert.ok(after.emailVerifiedAt instanceof Date);
+  assert.equal(after.id, before.id);
   return verified;
 }
+
+test('verification link sets emailVerifiedAt in PostgreSQL and preserves the same user row', async () => {
+  const email = `verify_db_${randomUUID()}@example.test`;
+  const password = `Pass_${randomUUID().slice(0, 8)}`;
+  await withServer(async ({ request }) => {
+    const verified = await registerAndVerify(request, email, password);
+    const row = await prisma.user.findUnique({ where: { email } });
+    assert.equal(row.id, verified.payload.data.user.id);
+    assert.ok(row.emailVerifiedAt);
+    assert.equal(row.email, email);
+    // Same account can log in after verification; row is not duplicated.
+    const login = await request('/api/auth/login', { method: 'POST', body: { email, password } });
+    assert.equal(login.response.status, 200);
+    assert.equal(login.payload.data.user.id, row.id);
+    assert.equal(await prisma.user.count({ where: { email } }), 1);
+  });
+  await prisma.user.deleteMany({ where: { email } }).catch(() => {});
+});
 
 test('register requires verification before password login and sets HttpOnly sessions', async () => {
   const email = `auth_${randomUUID()}@example.test`;
@@ -234,4 +262,63 @@ test('first-party password recovery changes the password and revokes prior sessi
   });
 
   await prisma.user.deleteMany({ where: { email } }).catch(() => {});
+});
+
+test('Firebase verifies signed Google claims and restores the same SQL user via its cookie', async (t) => {
+  const { generateKeyPair, exportJWK, SignJWT } = await import('jose');
+  const { privateKey, publicKey } = await generateKeyPair('RS256');
+  const key = { ...await exportJWK(publicKey), kid: 'fixture', alg: 'RS256' };
+  const originalFetch = globalThis.fetch;
+  t.mock.method(globalThis, 'fetch', (url, options) =>
+    String(url).startsWith('https://www.googleapis.com/service_accounts/v1/jwk/') ?
+      Promise.resolve(Response.json({ keys: [key] })) : originalFetch(url, options));
+  async function token(email, uid, googleId, verified = true) {
+    return new SignJWT({ email, email_verified: verified, firebase: {
+      sign_in_provider: 'google.com', identities: { 'google.com': [googleId] },
+    } }).setProtectedHeader({ alg: 'RS256', kid: 'fixture' }).setIssuedAt().setExpirationTime('5m')
+      .setSubject(uid).setAudience('volteniq-test').setIssuer('https://securetoken.google.com/volteniq-test').sign(privateKey);
+  }
+  await withServer(async ({ request }) => {
+    const email = randomUUID() + '@example.test';
+    const google = randomUUID();
+    const uid = randomUUID();
+    async function exchange(idToken) {
+      return request('/api/auth/firebase', { method: 'POST', body: { idToken } });
+    }
+    assert.equal((await exchange(await token(email, uid, google, false))).response.status, 401);
+    const first = await exchange(await token(email, uid, google));
+    assert.equal(first.response.status, 200);
+    assert.match(sessionCookie(first.setCookie), /HttpOnly/i);
+    const id = first.payload.data.user.id;
+    assert.equal((await request('/api/auth/session', { cookie: first.cookie })).payload.data.user.id, id);
+    assert.equal((await exchange(await token(email, uid, google))).payload.data.user.id, id);
+    assert.equal((await exchange(await token(email, randomUUID(), google))).response.status, 409);
+    assert.equal((await prisma.user.findUnique({ where: { id } })).googleId, google);
+    const existingEmail = randomUUID() + '@example.test';
+    const existing = await registerAndVerify(request, existingEmail, randomUUID());
+    const linked = await exchange(await token(existingEmail, randomUUID(), randomUUID()));
+    assert.equal(linked.payload.data.user.id, existing.payload.data.user.id);
+
+    const squatEmail = randomUUID() + '@example.test';
+    const squatPassword = `Pass_${randomUUID().slice(0, 8)}`;
+    const squatReg = await request('/api/auth/register', {
+      method: 'POST',
+      body: { email: squatEmail, password: squatPassword },
+    });
+    assert.equal(squatReg.response.status, 201);
+    const reclaimed = await exchange(await token(squatEmail, randomUUID(), randomUUID()));
+    assert.equal(reclaimed.response.status, 200);
+    assert.equal(reclaimed.payload.data.user.email, squatEmail);
+    assert.ok(reclaimed.payload.data.user.emailVerifiedAt);
+    assert.equal(
+      (await request('/api/auth/login', {
+        method: 'POST',
+        body: { email: squatEmail, password: squatPassword },
+      })).response.status,
+      401
+    );
+
+    await request('/api/auth/logout', { method: 'POST', cookie: first.cookie });
+    assert.equal((await request('/api/auth/session', { cookie: first.cookie })).payload.data.user, null);
+  });
 });

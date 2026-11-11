@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 
+process.env.AUTH_PROVIDER = 'clerk';
+process.env.CLERK_SECRET_KEY ||= 'sk_test_test_fixture';
 process.env.AUTH_TEST_RETURN_TOKEN = '1';
 
 const { default: app } = await import('../src/app.js');

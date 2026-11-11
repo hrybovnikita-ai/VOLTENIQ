@@ -145,6 +145,23 @@ export default function ProfilePage() {
         <div className="min-w-0">
           <h1 className="page-title">Profile</h1>
           <p className="text-muted mt-1 text-sm sm:text-base break-all">{user.email}</p>
+          <p className="mt-2 text-sm">
+            {user.emailVerifiedAt || user.emailVerified ? (
+              <span className="inline-flex items-center gap-1.5 text-volt">
+                <span className="h-1.5 w-1.5 rounded-full bg-volt" aria-hidden />
+                Email Verified
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-muted">
+                <span className="h-1.5 w-1.5 rounded-full bg-silver/50" aria-hidden />
+                Email not verified
+                {' · '}
+                <Link className="text-volt font-semibold hover:underline" to={`/verify-email?email=${encodeURIComponent(user.email || '')}`}>
+                  Resend verification
+                </Link>
+              </span>
+            )}
+          </p>
         </div>
         <div className="flex gap-2">
           {isAdmin && (
@@ -178,6 +195,14 @@ export default function ProfilePage() {
             <div className="min-w-0 flex-1">
               <p className="font-semibold truncate">{user.name}</p>
               <p className="text-sm text-muted truncate">{user.email}</p>
+              <p className="text-xs mt-1">
+                {user.emailVerifiedAt || user.emailVerified ? (
+                  <span className="text-volt">Email Verified</span>
+                ) : (
+                  <span className="text-muted">Email not verified</span>
+                )}
+                {user.hasGoogle ? <span className="text-muted"> · Google linked</span> : null}
+              </p>
             </div>
           </div>
           <div>

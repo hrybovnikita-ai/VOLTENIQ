@@ -184,6 +184,13 @@ export async function sessionUser(req) {
     return null;
   }
 
+  // Drop legacy cookie sessions for unverified password-only accounts.
+  // OAuth users are marked verified when Google proves email ownership.
+  if (!session.user.emailVerifiedAt && !session.user.googleId && !session.user.clerkId) {
+    await prisma.session.deleteMany({ where: { id } });
+    return null;
+  }
+
   if (now.getTime() - session.lastSeenAt.getTime() >= LAST_SEEN_TOUCH_MS) {
     await prisma.session.update({
       where: { id },

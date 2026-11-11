@@ -26,7 +26,7 @@ app.set('trust proxy', 1);
  * Custom bridge (not @clerk/express setHeader loop) preserves every Set-Cookie
  * — required for __client during Google OAuth. Scoped to /__clerk only.
  */
-const clerkFrontendProxy = createClerkFrontendProxyMiddleware();
+const clerkFrontendProxy = config.clerkEnabled && createClerkFrontendProxyMiddleware();
 if (clerkFrontendProxy) {
   app.use(clerkFrontendProxy);
 }
@@ -53,7 +53,7 @@ app.get('/api/health', (req, res) => {
     status: 'online',
     service: 'VOLTENIQ API',
     demoMode: config.demoMode,
-    clerkProxy: Boolean(config.clerkSecretKey && config.clerkPublishableKey),
+    clerkProxy: Boolean(clerkFrontendProxy),
     timestamp: new Date().toISOString(),
   });
 });

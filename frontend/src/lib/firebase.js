@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app'
 import {
-  initializeAuth,
+  initializeAuth, signInWithPopup, signOut,
   browserPopupRedirectResolver,
   inMemoryPersistence,
   GoogleAuthProvider,
@@ -15,20 +15,24 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 }
 
-const missing = Object.entries(firebaseConfig)
-  .filter(([, value]) => !value)
-  .map(([key]) => key)
-
-if (missing.length) {
-  console.warn(
-    `[VOLTENIQ] Missing Firebase config: ${missing.join(', ')}. Check frontend/.env`
-  )
+export const firebaseConfigured = ['apiKey', 'authDomain', 'projectId', 'appId'].every(key => firebaseConfig[key])
+let auth
+export async function googleIdToken() {
+  if (!firebaseConfigured) throw new Error('Google sign-in is unavailable. Use email and password.')
+  auth ??= initializeAuth(initializeApp(firebaseConfig, 'volteniq-google'), {
+    persistence: inMemoryPersistence, popupRedirectResolver: browserPopupRedirectResolver,
+  })
+  const provider = new GoogleAuthProvider()
+  provider.setCustomParameters({ prompt: 'select_account' })
+  try {
+    const result = await signInWithPopup(auth, provider)
+    return await result.user.getIdToken()
+  } catch (error) {
+    throw new Error(mapFirebaseAuthError(error))
+  } finally {
+    await signOut(auth)
+  }
 }
-
-export const firebaseApp = initializeApp(firebaseConfig)
-export const auth = initializeAuth(firebaseApp, { persistence: inMemoryPersistence, popupRedirectResolver: browserPopupRedirectResolver })
-export const googleProvider = new GoogleAuthProvider()
-googleProvider.setCustomParameters({ prompt: 'select_account' })
 
 export function mapFirebaseAuthError(error) {
   const code = error?.code || ''
@@ -61,7 +65,7 @@ export function mapFirebaseAuthError(error) {
     case 'auth/operation-not-allowed':
       return 'This sign-in method is not enabled in Firebase.'
     case 'auth/unauthorized-domain':
-      return 'This domain is not authorized for Firebase Auth. Add localhost in Firebase Console.'
+      return 'This domain is not authorized for Firebase Auth. Authorize this storefront domain in Firebase Authentication.'
     default:
       return error?.message || 'Authentication failed.'
   }

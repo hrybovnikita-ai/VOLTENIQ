@@ -2,7 +2,7 @@ const viteEnv = (typeof import.meta !== 'undefined' && import.meta.env) ? import
 
 export const CLERK_PUBLISHABLE_KEY = viteEnv.VITE_CLERK_PUBLISHABLE_KEY || ''
 
-export const isClerkEnabled = Boolean(CLERK_PUBLISHABLE_KEY)
+export const isClerkEnabled = viteEnv.VITE_AUTH_PROVIDER === 'clerk' && Boolean(CLERK_PUBLISHABLE_KEY)
 
 /** Same-origin Clerk Dashboard proxy URL for production Frontend API traffic. */
 export const CLERK_PROXY_URL = (

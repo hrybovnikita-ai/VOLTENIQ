@@ -10,7 +10,7 @@ import { safeRedirectPath } from '../utils/safeRedirect'
 const inputClass = 'auth-input'
 
 export default function LoginPage() {
-  const { login, loginWithGoogle, isAuthenticated, clerkEnabled } = useAuth()
+  const { login, loginWithGoogle, isAuthenticated, googleEnabled } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [form, setForm] = useState({ email: '', password: '' })
@@ -99,7 +99,7 @@ export default function LoginPage() {
         <div className="h-px flex-1 bg-silver/20" />
       </div>
 
-      {clerkEnabled ? (
+      {googleEnabled ? (
         <GoogleSignInButton
           disabled={loading}
           onClick={async () => {
@@ -114,7 +114,7 @@ export default function LoginPage() {
           }}
         />
       ) : (
-        <p className="text-sm text-muted text-center">Google sign-in requires Clerk configuration.</p>
+        <p className="text-sm text-muted text-center">Google sign-in is currently unavailable. Use email and password.</p>
       )}
     </AuthLayout>
   )

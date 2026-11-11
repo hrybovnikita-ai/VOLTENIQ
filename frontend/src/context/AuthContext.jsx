@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { useAuth as useClerkAuth, useClerk } from '@clerk/react'
 import { api } from '../api/client'
 import { isClerkEnabled, mapClerkError } from '../lib/clerk'
+import { firebaseConfigured, googleIdToken } from '../lib/firebase'
 import Spinner from '../components/ui/Spinner'
 
 const AuthContext = createContext(null)
@@ -134,7 +135,7 @@ function ClerkAuthProvider({ children }) {
         loading,
         isAuthenticated: Boolean(user),
         isAdmin: user?.role === 'ADMIN',
-        clerkEnabled: true,
+        googleEnabled: true,
         login,
         register,
         verifyEmailCode,
@@ -164,6 +165,7 @@ function LegacyAuthProvider({ children }) {
       .then((nextUser) => {
         if (active && version === revision.current) setUser(nextUser)
       })
+      .catch(() => { if (active && version === revision.current) setUser(null) })
       .finally(() => {
         if (active) setLoading(false)
       })
@@ -195,7 +197,7 @@ function LegacyAuthProvider({ children }) {
         loading: false,
         isAuthenticated: Boolean(user),
         isAdmin: user?.role === 'ADMIN',
-        clerkEnabled: false,
+        googleEnabled: import.meta.env.VITE_AUTH_PROVIDER !== 'clerk' && firebaseConfigured,
         login: async (email, password) => saveSession(await api.login({ email, password })),
         register: async ({ email, password }) => {
           const response = await api.register({ email, password })
@@ -207,7 +209,8 @@ function LegacyAuthProvider({ children }) {
         verifyEmailCode: async ({ email, token }) => saveSession(await api.verifyEmail({ email, token })),
         resendVerification: async (email) => api.resendVerification({ email }),
         loginWithGoogle: async () => {
-          throw new Error('Google sign-in requires Clerk. Set VITE_CLERK_PUBLISHABLE_KEY and redeploy.')
+          const idToken = await googleIdToken()
+          return saveSession(await api.firebaseSession({ idToken }))
         },
         logout: async () => {
           revision.current += 1

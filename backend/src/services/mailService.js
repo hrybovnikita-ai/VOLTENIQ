@@ -57,7 +57,8 @@ export async function sendAuthEmail({ to, subject, text, html }) {
       err.detail = detail.slice(0, 200);
       throw err;
     }
-    return { provider: 'resend' };
+    const payload = await response.json().catch(() => ({}));
+    return { provider: 'resend', id: payload.id || null };
   }
 
   const err = new Error('Set RESEND_API_KEY and MAIL_FROM for production email delivery.');
