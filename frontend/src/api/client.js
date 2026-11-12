@@ -1,6 +1,32 @@
 import axios from 'axios'
 
-const API_URL = import.meta.env.VITE_API_URL || '/api'
+export function resolveApiUrl(rawEnv, locationOrigin = '') {
+  const raw = String(rawEnv ?? '').trim()
+  // Guard against Git Bash mangling `/api` into a Windows path when setting Vercel env.
+  if (!raw || /^[A-Za-z]:[\\/]/.test(raw) || raw.includes('Program Files')) return '/api'
+
+  const normalized = raw.replace(/\/$/, '') || '/api'
+  // Prefer same-origin `/api` so HttpOnly session cookies stay first-party on
+  // every Vercel alias (desktop + mobile Safari/Chrome). Absolute API hosts that
+  // differ from the page origin make Set-Cookie cross-site and break auth.
+  if (locationOrigin && /^https?:\/\//i.test(normalized)) {
+    try {
+      const api = new URL(normalized)
+      const page = new URL(locationOrigin)
+      if (page.hostname.endsWith('.vercel.app') && api.origin !== page.origin) return '/api'
+      if (api.origin === page.origin) return `${api.pathname.replace(/\/$/, '') || '/api'}`
+    } catch {
+      return '/api'
+    }
+  }
+  return normalized
+}
+
+const viteApiUrl = (typeof import.meta !== 'undefined' && import.meta.env)
+  ? import.meta.env.VITE_API_URL
+  : undefined
+const pageOrigin = typeof window !== 'undefined' ? window.location.origin : ''
+const API_URL = resolveApiUrl(viteApiUrl, pageOrigin)
 
 export const http = axios.create({
   baseURL: API_URL,
@@ -27,6 +53,8 @@ http.interceptors.response.use(
     apiError.status = error.response.status
     apiError.provider = payload?.provider
     apiError.errors = payload?.errors
+    apiError.code = payload?.code
+    apiError.data = payload?.data
     return Promise.reject(apiError)
   }
 )
@@ -35,6 +63,36 @@ http.interceptors.response.use(
 async function request(method, path, { params, data } = {}) {
   const response = await http.request({ method, url: path, params, data })
   return response.data
+}
+
+/**
+ * POST that survives the page navigating away (fetch keepalive), used for
+ * logout: sign-out hard-navigates to /login on a deadline, and an XHR still in
+ * flight at that moment would be aborted. Errors match the axios shape.
+ */
+async function keepalivePost(path) {
+  if (typeof fetch !== 'function') return request('post', path)
+  let response
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      method: 'POST',
+      credentials: 'include',
+      keepalive: true,
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    })
+  } catch {
+    const networkError = new Error('Cannot reach the VOLTENIQ API. Please check your connection and try again.')
+    networkError.status = 0
+    throw networkError
+  }
+  const payload = await response.json().catch(() => null)
+  if (!response.ok) {
+    const apiError = new Error(payload?.message || 'The server could not complete the request. Please try again.')
+    apiError.status = response.status
+    throw apiError
+  }
+  return payload
 }
 
 function cleanParams(params = {}) {
@@ -57,14 +115,20 @@ export const api = {
   compareProducts: (ids) =>
     request('get', '/products/compare', { params: { ids: ids.join(',') } }),
   login: (body) => request('post', '/auth/login', { data: body }),
+  forgotPassword: (body) => request('post', '/auth/forgot-password', { data: body }),
   resetPassword: (body) => request('post', '/auth/reset-password', { data: body }),
-  logout: () => request('post', '/auth/logout'),
+  verifyEmail: (body) => request('post', '/auth/verify-email', { data: body }),
+  resendVerification: (body) => request('post', '/auth/resend-verification', { data: body }),
+  logout: () => keepalivePost('/auth/logout'),
   register: (body) => request('post', '/auth/register', { data: body }),
   firebaseSession: (body) => request('post', '/auth/firebase', { data: body }),
   clerkSession: (body) => request('post', '/auth/clerk', { data: body }),
   authProviders: () => request('get', '/auth/providers'),
   session: () => request('get', '/auth/session'),
   me: () => request('get', '/auth/me'),
+  listSessions: () => request('get', '/auth/sessions'),
+  revokeSession: (id) => request('delete', `/auth/sessions/${id}`),
+  revokeOtherSessions: (body = {}) => request('post', '/auth/sessions/revoke-all', { data: body }),
   updateProfile: (body) => request('put', '/auth/me', { data: body }),
   getOrders: () => request('get', '/orders'),
   getOrder: (id) => request('get', `/orders/${id}`),

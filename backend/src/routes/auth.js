@@ -1,12 +1,16 @@
-import { resetPasswordWithEmailLink } from '../services/passwordRecovery.js';
+import { requestPasswordReset, resetPasswordWithToken } from '../services/passwordRecovery.js';
 import { Router } from 'express';
 import {
   startSession,
   endSession,
   sessionUser,
+  sessionId,
   revokeAllUserSessions,
+  revokeUserSession,
+  revokeOtherUserSessions,
+  listUserSessions,
 } from '../services/sessionService.js';
-import { body } from 'express-validator';
+import { body, param } from 'express-validator';
 import { config } from '../config.js';
 import { validate } from '../middleware/validate.js';
 import { authenticate } from '../middleware/auth.js';
@@ -20,6 +24,11 @@ import {
 import { verifyFirebaseIdToken } from '../utils/firebaseAuth.js';
 import { verifyClerkSessionToken } from '../utils/clerkAuth.js';
 import {
+  consumeAuthToken,
+  sendEmailVerification,
+} from '../services/authTokenService.js';
+import { isMailConfigured } from '../services/mailService.js';
+import {
   createUser,
   findUserByEmail,
   verifyPassword,
@@ -27,6 +36,8 @@ import {
   findOrCreateClerkUser,
   getUserById,
   updateUser,
+  markEmailVerified,
+  isEmailVerified,
 } from '../services/userService.js';
 import { prisma } from '../db/prisma.js';
 
@@ -46,24 +57,113 @@ const passwordField = (message = 'Use at least 8 characters and at most 72 bytes
   body('password').isString().isLength({ min: 8 }).isByteLength({ max: 72 }).withMessage(message)
 );
 
+function requireMailConfigured(res) {
+  if (isMailConfigured()) return false;
+  res.status(503).json({
+    success: false,
+    message: 'Email delivery is not configured. Set RESEND_API_KEY and MAIL_FROM before using email verification or password recovery.',
+    code: 'mail_not_configured',
+  });
+  return true;
+}
+
+router.post('/forgot-password', resetLimiter, [
+  emailField(),
+], validate, asyncHandler(async (req, res) => {
+  if (requireMailConfigured(res)) return;
+  await requestPasswordReset(req.body.email);
+  // Generic success only after mail layer is configured (unknown emails still look the same).
+  res.json({
+    success: true,
+    message: 'If an account exists for that email, a reset link has been sent.',
+  });
+}));
+
 router.post('/reset-password', resetLimiter, [
   emailField(),
-  body('code').isString().isLength({ min: 1, max: 2048 }),
+  body('token').isString().isLength({ min: 64, max: 128 }),
   passwordField(),
 ], validate, asyncHandler(async (req, res) => {
-  const { email, code, password } = req.body;
-  await resetPasswordWithEmailLink(email, code, password);
-  res.json({ success: true });
+  const { email, token, password } = req.body;
+  await resetPasswordWithToken(email, token, password);
+  res.json({ success: true, message: 'Password updated. Sign in with your new password.' });
 }));
 
 router.post('/register', registerLimiter, [
   emailField(),
   passwordField(),
 ], validate, asyncHandler(async (req, res) => {
+  if (requireMailConfigured(res)) return;
+
   const { email, password } = req.body;
-  const user = await createUser({ email, password, name: nameFromEmail(email) });
-  await startSession(req, res, user.id);
-  res.status(201).json({ success: true, data: { user } });
+  const user = await createUser({
+    email,
+    password,
+    name: nameFromEmail(email),
+    emailVerifiedAt: null,
+  });
+
+  try {
+    const sent = await sendEmailVerification({ id: user.id, email: user.email });
+    res.status(201).json({
+      success: true,
+      message: 'Check your email to verify your account before signing in.',
+      data: {
+        needsVerification: true,
+        email: user.email,
+        ...(config.authTestReturnToken && sent.token ? { token: sent.token } : {}),
+      },
+    });
+  } catch (error) {
+    // Leave the unverified account in place for a later resend once mail works.
+    if (error.status === 503) {
+      return res.status(503).json({
+        success: false,
+        message: error.message,
+        code: error.code || 'mail_not_configured',
+        data: { needsVerification: true, email: user.email },
+      });
+    }
+    throw error;
+  }
+}));
+
+router.post('/resend-verification', resetLimiter, [
+  emailField(),
+], validate, asyncHandler(async (req, res) => {
+  if (requireMailConfigured(res)) return;
+
+  const email = String(req.body.email).toLowerCase().trim();
+  const account = await findUserByEmail(email);
+  const googleOnly = !account?.password
+    || account.password === 'GOOGLE_ONLY'
+    || account.password.startsWith('GOOGLE_ONLY');
+  if (account && !isEmailVerified(account) && !googleOnly) {
+    await sendEmailVerification(account);
+  }
+
+  res.json({
+    success: true,
+    message: 'If that account needs verification, a new email has been sent.',
+  });
+}));
+
+router.post('/verify-email', resetLimiter, [
+  emailField(),
+  body('token').isString().isLength({ min: 64, max: 128 }),
+], validate, asyncHandler(async (req, res) => {
+  const user = await consumeAuthToken({
+    email: req.body.email,
+    token: req.body.token,
+    type: 'EMAIL_VERIFY',
+  });
+  const verified = await markEmailVerified(user.id);
+  await startSession(req, res, verified.id);
+  res.json({
+    success: true,
+    message: 'Email verified. You are signed in.',
+    data: { user: verified },
+  });
 }));
 
 router.post('/login', loginLimiter, [
@@ -78,6 +178,16 @@ router.post('/login', loginLimiter, [
       message: 'Invalid email or password. If you have not registered on this store, choose Create Account.',
     });
   }
+
+  if (!isEmailVerified(account)) {
+    return res.status(401).json({
+      success: false,
+      message: 'Verify your email before signing in. Check your inbox or resend the verification link.',
+      code: 'email_unverified',
+      data: { email: account.email, needsVerification: true },
+    });
+  }
+
   const user = await getUserById(account.id);
   await startSession(req, res, user.id);
   res.json({ success: true, data: { user } });
@@ -90,9 +200,9 @@ router.get(
       success: true,
       data: {
         clerk: config.clerkEnabled,
-        // Firebase bridge is disabled while Clerk is the primary Google provider.
-        firebase: Boolean(config.firebaseProjectId) && !config.clerkEnabled,
-        google: config.clerkEnabled || Boolean(config.firebaseProjectId),
+        firebase: config.firebaseEnabled,
+        google: config.clerkEnabled || config.firebaseEnabled,
+        mailConfigured: isMailConfigured(),
         projectId: config.firebaseProjectId || null,
       },
     });
@@ -105,6 +215,7 @@ router.post(
   [body('token').notEmpty().withMessage('Clerk session token required')],
   validate,
   asyncHandler(async (req, res) => {
+    if (!config.clerkEnabled) return res.status(410).json({ message: 'Clerk sign-in is disabled.' });
     const claims = await verifyClerkSessionToken(req.body.token);
     const user = await findOrCreateClerkUser({
       clerkId: claims.clerkId,
@@ -130,18 +241,20 @@ router.post(
   [body('idToken').notEmpty().withMessage('Firebase ID token required')],
   validate,
   asyncHandler(async (req, res) => {
-    if (config.clerkEnabled) {
+    if (!config.firebaseEnabled) {
       return res.status(410).json({
         success: false,
-        message: 'Firebase sign-in is disabled. Continue with Google through Clerk instead.',
+        message: 'Firebase sign-in is unavailable.',
       });
     }
     const claims = await verifyFirebaseIdToken(req.body.idToken);
     const user = await findOrCreateFirebaseUser({
       firebaseUid: claims.uid,
+      googleId: claims.googleId,
       email: claims.email,
       name: claims.name || nameFromEmail(claims.email),
       signInProvider: claims.signInProvider,
+      emailVerified: true,
     });
     await startSession(req, res, user.id);
     res.json({
@@ -169,6 +282,51 @@ router.get(
   asyncHandler(async (req, res) => {
     const user = req.user;
     res.json({ success: true, data: { user } });
+  })
+);
+
+router.get(
+  '/sessions',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const current = sessionId(req);
+    const sessions = await listUserSessions(req.user.id, current);
+    res.json({ success: true, data: { sessions } });
+  })
+);
+
+router.delete(
+  '/sessions/:id',
+  authenticate,
+  [param('id').isString().isLength({ min: 16, max: 128 })],
+  validate,
+  asyncHandler(async (req, res) => {
+    const current = sessionId(req);
+    if (req.params.id === current) {
+      await endSession(req, res);
+      return res.json({ success: true, message: 'Current session signed out.' });
+    }
+    const count = await revokeUserSession(req.user.id, req.params.id);
+    if (!count) {
+      return res.status(404).json({ success: false, message: 'Session not found.' });
+    }
+    res.json({ success: true });
+  })
+);
+
+router.post(
+  '/sessions/revoke-all',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const current = sessionId(req);
+    const keepCurrent = req.body?.keepCurrent !== false;
+    if (keepCurrent && current) {
+      await revokeOtherUserSessions(req.user.id, current);
+      return res.json({ success: true, message: 'Signed out of other devices.' });
+    }
+    await revokeAllUserSessions(req.user.id);
+    await startSession(req, res, req.user.id);
+    res.json({ success: true, message: 'All other sessions revoked.' });
   })
 );
 

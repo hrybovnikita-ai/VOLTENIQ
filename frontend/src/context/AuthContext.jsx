@@ -1,15 +1,38 @@
+import { clearLogoutPending, onPageRestored, performSignOut, restoreStoreSession, SIGNED_OUT_PATH } from '../lib/signOut'
+import { browserStorage } from '../utils/browserStorage'
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useAuth as useClerkAuth, useClerk } from '@clerk/react'
 import { api } from '../api/client'
 import { isClerkEnabled, mapClerkError } from '../lib/clerk'
+import { consumeGoogleRedirectResult, firebaseConfigured, firebaseSignOut, googleIdToken } from '../lib/firebase'
 import Spinner from '../components/ui/Spinner'
 
 const AuthContext = createContext(null)
 
-
 async function restoreCookieSession() {
   const { data } = await api.session()
   return data.user || null
+}
+
+// Finishes an interrupted sign-out before trusting the cookie session.
+function bootstrapCookieSession() {
+  return restoreStoreSession({ logout: api.logout, restore: restoreCookieSession })
+}
+
+// iOS Safari, Telegram's WKWebView and Chrome restore pages from the
+// back/forward cache with their old React state. Re-check the cookie session
+// so a page from before a sign-out cannot show (or act as) a signed-in user.
+function useRevalidateOnPageRestore(revision, setUser) {
+  useEffect(() => onPageRestored(async () => {
+    const version = ++revision.current
+    let nextUser
+    try {
+      nextUser = await bootstrapCookieSession()
+    } catch {
+      nextUser = null
+    }
+    if (version === revision.current) setUser(nextUser)
+  }), [revision, setUser])
 }
 
 function ClerkAuthProvider({ children }) {
@@ -18,9 +41,11 @@ function ClerkAuthProvider({ children }) {
   const revision = useRef(0)
   const clerk = useClerkAuth()
   const clerkSdk = useClerk()
+  useRevalidateOnPageRestore(revision, setUser)
 
   const saveSession = useCallback(({ data }) => {
     revision.current += 1
+    clearLogoutPending()
     setUser(data.user)
     return data.user
   }, [])
@@ -30,21 +55,16 @@ function ClerkAuthProvider({ children }) {
     const token = await clerk.getToken()
     if (!token) throw new Error('Google session expired. Please sign in again.')
     return saveSession(await api.clerkSession({ token }))
-  }, [clerk.isSignedIn, clerk.getToken, saveSession])
+  }, [clerk, saveSession])
 
   useEffect(() => {
     const version = revision.current
     let active = true
-    localStorage.removeItem('volteniq_token')
+    browserStorage.removeItem('volteniq_token')
 
     async function bootstrap() {
-
-
-      // Restore the store cookie independently of the external OAuth SDK.
-
-
       try {
-        const nextUser = await restoreCookieSession()
+        const nextUser = await bootstrapCookieSession()
         if (active && version === revision.current) setUser(nextUser)
       } catch {
         if (active && version === revision.current) setUser(null)
@@ -64,27 +84,34 @@ function ClerkAuthProvider({ children }) {
   }
 
   async function register({ email, password }) {
-    const nextUser = saveSession(await api.register({ email, password }))
-    return { user: nextUser, needsVerification: false }
+    const response = await api.register({ email, password })
+    if (response?.data?.needsVerification) {
+      return { user: null, needsVerification: true, email: response.data.email || email }
+    }
+    if (response?.data?.user) {
+      return { user: saveSession(response), needsVerification: false }
+    }
+    return { user: null, needsVerification: true, email }
   }
 
-  async function verifyEmailCode() {
-    throw new Error('Email verification is handled by the store account flow')
-  }
+  const verifyEmailCode = useCallback(async ({ email, token }) => (
+    saveSession(await api.verifyEmail({ email, token }))
+  ), [saveSession])
+
+  const resendVerification = useCallback(async (email) => (
+    api.resendVerification({ email })
+  ), [])
 
   async function loginWithGoogle() {
     if (clerk.isSignedIn) return syncClerkSession()
-    // A first click can arrive before the external Clerk script has initialized.
     const deadline = Date.now() + 8000
     while (!clerkSdk.client && Date.now() < deadline) {
-      await new Promise(resolve => setTimeout(resolve, 100))
+      await new Promise((resolve) => setTimeout(resolve, 100))
     }
     if (!clerkSdk.client?.signIn) {
       throw new Error('Google sign-in could not load. Retry in Safari or Chrome, or use email and password.')
     }
     try {
-      // Always start on SignIn. Clerk transfers new Google users to SignUp when needed,
-      // which avoids minting a second Clerk user for an email that already exists.
       await clerkSdk.client.signIn.authenticateWithRedirect({
         strategy: 'oauth_google',
         redirectUrl: `${window.location.origin}/sso-callback`,
@@ -97,18 +124,15 @@ function ClerkAuthProvider({ children }) {
     return null
   }
 
-  async function logout() {
-    revision.current += 1
-    try {
-      await api.logout()
-    } finally {
-      try {
-        if (clerk.isSignedIn) await clerkSdk.signOut({ redirectUrl: window.location.origin })
-      } catch {
-        // Cookie session already cleared.
-      }
-      setUser(null)
-    }
+  function logout() {
+    return performSignOut({
+      serverLogout: api.logout,
+      providers: clerk.isSignedIn ? [() => clerkSdk.signOut({ redirectUrl: SIGNED_OUT_PATH })] : [],
+      clearState: () => {
+        revision.current += 1
+        setUser(null)
+      },
+    })
   }
 
   async function updateProfileInfo(payload) {
@@ -124,10 +148,13 @@ function ClerkAuthProvider({ children }) {
         loading,
         isAuthenticated: Boolean(user),
         isAdmin: user?.role === 'ADMIN',
-        clerkEnabled: true,
+        googleEnabled: true,
+        authError: '',
+        clearAuthError: () => {},
         login,
         register,
         verifyEmailCode,
+        resendVerification,
         loginWithGoogle,
         logout,
         updateProfile: updateProfileInfo,
@@ -142,31 +169,60 @@ function ClerkAuthProvider({ children }) {
 function LegacyAuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [authError, setAuthError] = useState('')
   const revision = useRef(0)
+  useRevalidateOnPageRestore(revision, setUser)
+
+  const saveSession = useCallback(({ data }) => {
+    revision.current += 1
+    clearLogoutPending()
+    setAuthError('')
+    setUser(data.user)
+    return data.user
+  }, [])
 
   useEffect(() => {
     const version = revision.current
     let active = true
-    localStorage.removeItem('volteniq_token')
+    browserStorage.removeItem('volteniq_token')
 
-    restoreCookieSession()
-      .then((nextUser) => {
+    async function bootstrap() {
+      // Complete a Firebase Google redirect before restoring a cookie session.
+      // A failed redirect must still fall through to the cookie session and
+      // tell the shopper why Google did not sign them in.
+      let redirectToken = null
+      if (firebaseConfigured) {
+        try {
+          redirectToken = await consumeGoogleRedirectResult()
+        } catch (error) {
+          if (active) setAuthError(error.message || 'Google sign-in failed. Please try again.')
+        }
+      }
+      try {
+        if (!active || version !== revision.current) return
+        if (redirectToken) {
+          try {
+            saveSession(await api.firebaseSession({ idToken: redirectToken }))
+            return
+          } catch (error) {
+            if (active) setAuthError(error.message || 'Google sign-in failed. Please try again.')
+          }
+        }
+
+        const nextUser = await bootstrapCookieSession()
         if (active && version === revision.current) setUser(nextUser)
-      })
-      .finally(() => {
+      } catch {
+        if (active && version === revision.current) setUser(null)
+      } finally {
         if (active) setLoading(false)
-      })
+      }
+    }
 
+    bootstrap()
     return () => {
       active = false
     }
-  }, [])
-
-  function saveSession({ data }) {
-    revision.current += 1
-    setUser(data.user)
-    return data.user
-  }
+  }, [saveSession])
 
   if (loading) {
     return (
@@ -184,26 +240,37 @@ function LegacyAuthProvider({ children }) {
         loading: false,
         isAuthenticated: Boolean(user),
         isAdmin: user?.role === 'ADMIN',
-        clerkEnabled: false,
+        googleEnabled: firebaseConfigured,
+        authError,
+        clearAuthError: () => setAuthError(''),
         login: async (email, password) => saveSession(await api.login({ email, password })),
-        register: async ({ email, password }) => ({
-          user: saveSession(await api.register({ email, password })),
-          needsVerification: false,
-        }),
-        verifyEmailCode: async () => {
-          throw new Error('Email verification is unavailable')
-        },
-        loginWithGoogle: async () => {
-          throw new Error('Google sign-in requires Clerk. Set VITE_CLERK_PUBLISHABLE_KEY and redeploy.')
-        },
-        logout: async () => {
-          revision.current += 1
-          try {
-            await api.logout()
-          } finally {
-            setUser(null)
+        register: async ({ email, password }) => {
+          const response = await api.register({ email, password })
+          if (response?.data?.needsVerification) {
+            return { user: null, needsVerification: true, email: response.data.email || email }
           }
+          if (response?.data?.user) {
+            return { user: saveSession(response), needsVerification: false }
+          }
+          return { user: null, needsVerification: true, email }
         },
+        verifyEmailCode: async ({ email, token }) => saveSession(await api.verifyEmail({ email, token })),
+        resendVerification: async (email) => api.resendVerification({ email }),
+        loginWithGoogle: async () => {
+          const idToken = await googleIdToken()
+          // null => full-page redirect started (Safari / popup-blocked).
+          if (!idToken) return null
+          return saveSession(await api.firebaseSession({ idToken }))
+        },
+        // Never rejects; always ends on /login (see lib/signOut.js).
+        logout: () => performSignOut({
+          serverLogout: api.logout,
+          providers: firebaseConfigured ? [firebaseSignOut] : [],
+          clearState: () => {
+            revision.current += 1
+            setUser(null)
+          },
+        }),
         updateProfile: async (payload) => {
           const { data } = await api.updateProfile(payload)
           setUser(data.user)
@@ -218,7 +285,7 @@ function LegacyAuthProvider({ children }) {
 }
 
 export function AuthProvider({ children }) {
-  if (isClerkEnabled) return <ClerkAuthProvider>{children}</ClerkAuthProvider>
+  if (isClerkEnabled && !firebaseConfigured) return <ClerkAuthProvider>{children}</ClerkAuthProvider>
   return <LegacyAuthProvider>{children}</LegacyAuthProvider>
 }
 

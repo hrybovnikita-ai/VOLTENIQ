@@ -3,6 +3,8 @@ import { prisma } from '../db/prisma.js';
 import { config } from '../config.js';
 
 export const SESSION_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
+export const SESSION_IDLE_MS = 14 * 24 * 60 * 60 * 1000;
+const LAST_SEEN_TOUCH_MS = 5 * 60 * 1000;
 
 const secure = config.nodeEnv === 'production' || config.isVercel;
 const crossSite = process.env.SESSION_SAME_SITE === 'none';
@@ -39,27 +41,45 @@ function readSessionToken(req) {
   return /^[a-f0-9]{64}$/.test(token) ? token : null;
 }
 
-function sessionId(req) {
+export function sessionId(req) {
   const token = readSessionToken(req);
   return token ? digest(token) : null;
+}
+
+function clientMeta(req) {
+  const userAgent = String(req.headers['user-agent'] || '').slice(0, 512) || null;
+  const ip = String(req.ip || req.headers['x-forwarded-for'] || '')
+    .split(',')[0]
+    .trim()
+    .slice(0, 64) || null;
+  return { userAgent, ip };
 }
 
 export async function startSession(req, res, userId) {
   const token = randomBytes(32).toString('hex');
   const previous = sessionId(req);
   const now = new Date();
+  const meta = clientMeta(req);
 
   await prisma.$transaction([
     prisma.session.deleteMany({
       where: {
-        OR: [{ expiresAt: { lte: now } }, ...(previous ? [{ id: previous }] : [])],
+        OR: [
+          { expiresAt: { lte: now } },
+          { lastSeenAt: { lte: new Date(now.getTime() - SESSION_IDLE_MS) } },
+          ...(previous ? [{ id: previous }] : []),
+        ],
       },
     }),
     prisma.session.create({
       data: {
         id: digest(token),
         userId,
+        createdAt: now,
+        lastSeenAt: now,
         expiresAt: new Date(now.getTime() + SESSION_LIFETIME_MS),
+        userAgent: meta.userAgent,
+        ip: meta.ip,
       },
     }),
   ]);
@@ -70,10 +90,26 @@ export async function startSession(req, res, userId) {
   });
 }
 
+function clearSessionCookie(res, name) {
+  // Mirror set options exactly so Safari / Chrome / iOS drop __Host- and legacy cookies.
+  res.clearCookie(name, {
+    ...cookieOptions,
+    maxAge: 0,
+    expires: new Date(0),
+  });
+}
+
 export async function endSession(req, res) {
   const id = sessionId(req);
+  // Expire the cookies first so the browser drops them even if the database
+  // call below fails; the error response still carries these Set-Cookie headers.
+  clearSessionCookie(res, SESSION_COOKIE_NAME);
+  // Also clear the alternate name in case an older deploy left a stale cookie.
+  clearSessionCookie(res, SESSION_COOKIE_NAME === '__Host-volteniq_session'
+    ? 'volteniq_session'
+    : '__Host-volteniq_session');
+  // Deletes only this browser's session row; users and orders are untouched.
   if (id) await prisma.session.deleteMany({ where: { id } });
-  res.clearCookie(SESSION_COOKIE_NAME, cookieOptions);
 }
 
 /** Revoke every store session for a user (password change / recovery). */
@@ -82,16 +118,107 @@ export async function revokeAllUserSessions(userId) {
   await prisma.session.deleteMany({ where: { userId } });
 }
 
+export async function revokeUserSession(userId, targetId, { exceptId = null } = {}) {
+  if (!userId || !targetId) return 0;
+  if (exceptId && targetId === exceptId) return 0;
+  const result = await prisma.session.deleteMany({
+    where: { id: targetId, userId },
+  });
+  return result.count;
+}
+
+export async function revokeOtherUserSessions(userId, currentId) {
+  if (!userId) return 0;
+  const result = await prisma.session.deleteMany({
+    where: {
+      userId,
+      ...(currentId ? { id: { not: currentId } } : {}),
+    },
+  });
+  return result.count;
+}
+
+export async function listUserSessions(userId, currentId) {
+  const now = new Date();
+  const sessions = await prisma.session.findMany({
+    where: {
+      userId,
+      expiresAt: { gt: now },
+      lastSeenAt: { gt: new Date(now.getTime() - SESSION_IDLE_MS) },
+    },
+    orderBy: { lastSeenAt: 'desc' },
+    select: {
+      id: true,
+      createdAt: true,
+      lastSeenAt: true,
+      expiresAt: true,
+      userAgent: true,
+      ip: true,
+    },
+  });
+
+  return sessions.map((session) => ({
+    id: session.id,
+    createdAt: session.createdAt,
+    lastSeenAt: session.lastSeenAt,
+    expiresAt: session.expiresAt,
+    userAgent: session.userAgent,
+    ip: session.ip,
+    current: session.id === currentId,
+  }));
+}
+
 export async function sessionUser(req) {
   const id = sessionId(req);
   if (!id) return null;
 
+  const now = new Date();
   const session = await prisma.session.findFirst({
-    where: { id, expiresAt: { gt: new Date() } },
+    where: { id, expiresAt: { gt: now } },
     select: {
-      user: { select: { id: true, name: true, email: true, avatarUrl: true, role: true } },
+      id: true,
+      lastSeenAt: true,
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          avatarUrl: true,
+          role: true,
+          emailVerifiedAt: true,
+          googleId: true,
+          clerkId: true,
+        },
+      },
     },
   });
 
-  return session?.user || null;
+  if (!session?.user) return null;
+
+  if (session.lastSeenAt.getTime() <= now.getTime() - SESSION_IDLE_MS) {
+    await prisma.session.deleteMany({ where: { id } });
+    return null;
+  }
+
+  // Drop legacy cookie sessions for unverified password-only accounts.
+  // OAuth users are marked verified when Google proves email ownership.
+  if (!session.user.emailVerifiedAt && !session.user.googleId && !session.user.clerkId) {
+    await prisma.session.deleteMany({ where: { id } });
+    return null;
+  }
+
+  if (now.getTime() - session.lastSeenAt.getTime() >= LAST_SEEN_TOUCH_MS) {
+    await prisma.session.update({
+      where: { id },
+      data: { lastSeenAt: now },
+    }).catch(() => {});
+  }
+
+  const { googleId, clerkId, ...safeUser } = session.user;
+  return {
+    ...safeUser,
+    emailVerifiedAt: session.user.emailVerifiedAt,
+    hasGoogle: Boolean(googleId),
+    hasClerk: Boolean(clerkId),
+  };
 }

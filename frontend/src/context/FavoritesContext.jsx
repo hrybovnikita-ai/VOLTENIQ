@@ -1,3 +1,4 @@
+import { browserStorage } from '../utils/browserStorage'
 import { createContext, useContext, useEffect, useState } from 'react'
 import { api } from '../api/client'
 import { useAuth } from './AuthContext'
@@ -9,7 +10,7 @@ export function FavoritesProvider({ children }) {
   const { isAuthenticated } = useAuth()
   const [ids, setIds] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+      return JSON.parse(browserStorage.getItem(STORAGE_KEY) || '[]')
     } catch {
       return []
     }
@@ -17,7 +18,7 @@ export function FavoritesProvider({ children }) {
   const [products, setProducts] = useState([])
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(ids))
+    browserStorage.setItem(STORAGE_KEY, JSON.stringify(ids))
   }, [ids])
 
   useEffect(() => {

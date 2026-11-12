@@ -198,7 +198,7 @@ export default function ProductViewer({
       </div>
 
       <div className="px-4 pt-3 flex flex-wrap gap-2" aria-label="Product feature points">
-        {points.map(([label, detail]) => <button type="button" key={label} aria-expanded={point === label}
+        {points.map(([label]) => <button type="button" key={label} aria-expanded={point === label}
           className="rounded-full border border-silver/30 px-3 py-1.5 text-sm hover:border-volt"
           onClick={() => setPoint(point === label ? null : label)}><span className="text-volt">✦ </span>{label}</button>)}
         {point && <p className="w-full text-sm py-2" role="status">{String(points.find(([label]) => label === point)?.[1] || '')}</p>}

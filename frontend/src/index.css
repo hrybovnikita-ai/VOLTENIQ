@@ -436,6 +436,12 @@ html.dark .glass-nav {
     0 0 28px rgba(255, 121, 0, 0.08);
 }
 
+.glass-menu.account-menu {
+  /* The shared glass rule sets position: relative, which is unlayered and so
+     beats Tailwind's `absolute` utility. Keep the account dropdown floating. */
+  position: absolute;
+}
+
 .glass-input {
   border-radius: 0.9rem;
   background:

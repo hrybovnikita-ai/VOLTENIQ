@@ -18,10 +18,12 @@ import FavoritesPage from './pages/FavoritesPage'
 import ComparePage from './pages/ComparePage'
 import { lazy, Suspense } from 'react'
 const RecoveryPage = lazy(() => import('./pages/RecoveryPage'))
+const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'))
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
 import SsoCallbackPage from './pages/SsoCallbackPage'
 import { isClerkEnabled } from './lib/clerk'
+import { firebaseConfigured } from './lib/firebase'
 import ProfilePage from './pages/ProfilePage'
 import AdminPage from './pages/AdminPage'
 import AssistantPage from './pages/AssistantPage'
@@ -37,9 +39,10 @@ export default function App() {
               <BrowserRouter>
                 <Routes>
                   {['forgot-password', 'reset-password'].map(path => <Route key={path} path={path} element={<Suspense fallback={<p role="status">Loading…</p>}><RecoveryPage /></Suspense>} />)}
+                  <Route path="verify-email" element={<Suspense fallback={<p role="status">Loading…</p>}><VerifyEmailPage /></Suspense>} />
                   <Route path="login" element={<LoginPage />} />
                   <Route path="signup" element={<SignupPage />} />
-                  {isClerkEnabled ? <Route path="sso-callback" element={<SsoCallbackPage />} /> : null}
+                  {isClerkEnabled && !firebaseConfigured ? <Route path="sso-callback" element={<SsoCallbackPage />} /> : null}
                   <Route element={<Layout />}>
                     <Route index element={<HomePage />} />
                     <Route path="catalog" element={<CatalogPage />} />

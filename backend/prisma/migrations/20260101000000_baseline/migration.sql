@@ -1,0 +1,2 @@
+-- Baseline for existing Neon schema managed prior to Prisma Migrate.
+-- Intentionally empty: tables already exist in production.

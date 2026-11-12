@@ -12,3 +12,7 @@ test('safeRedirectPath allows relative app paths only', () => {
   assert.equal(safeRedirectPath(''), '/')
   assert.equal(safeRedirectPath(null, '/home'), '/home')
 })
+
+test('rejects URLs that become protocol-relative after browser normalization', () => {
+  assert.equal(safeRedirectPath('/\t/example.com'), '/')
+})

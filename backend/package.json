@@ -16,7 +16,7 @@
     "mongo:sync": "node scripts/mongo-sync.js",
     "mongo": "node scripts/mongo-check.js",
     "mongo:setup": "node scripts/mongo-setup.js",
-    "test:auth": "node --test test/auth.test.js",
+    "test:auth": "node --test test/auth.test.js test/auth-security.test.js test/clerk-link.test.js test/auth-flows.test.js test/logout.test.js",
     "test:security": "node --test test/security.test.js",
     "test:checkout": "node --test test/checkout.test.js",
     "test:chat": "node --test test/chat.test.js",

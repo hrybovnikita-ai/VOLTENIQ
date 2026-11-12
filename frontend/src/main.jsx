@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { ClerkProvider } from '@clerk/react'
 import './index.css'
 import App from './App.jsx'
+import { firebaseConfigured } from './lib/firebase'
 import {
   CLERK_PUBLISHABLE_KEY,
   isClerkEnabled,
@@ -11,7 +12,7 @@ import {
 
 const clerkProxyUrl = resolveClerkProxyUrl()
 
-const tree = isClerkEnabled ? (
+const tree = isClerkEnabled && !firebaseConfigured ? (
   <ClerkProvider
     publishableKey={CLERK_PUBLISHABLE_KEY}
     {...(clerkProxyUrl ? { proxyUrl: clerkProxyUrl } : {})}

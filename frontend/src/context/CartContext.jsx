@@ -1,3 +1,4 @@
+import { browserStorage } from '../utils/browserStorage'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api/client'
 import { useAuth } from './AuthContext'
@@ -63,7 +64,7 @@ export function CartProvider({ children }) {
   const { isAuthenticated } = useAuth()
   const [items, setItems] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+      return JSON.parse(browserStorage.getItem(STORAGE_KEY) || '[]')
     } catch {
       return []
     }
@@ -85,7 +86,7 @@ export function CartProvider({ children }) {
       return
     }
     if (!isAuthenticated) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
+      browserStorage.setItem(STORAGE_KEY, JSON.stringify(items))
     }
   }, [items, isAuthenticated])
 
@@ -125,7 +126,7 @@ export function CartProvider({ children }) {
       try {
         const localItems = (() => {
           try {
-            return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+            return JSON.parse(browserStorage.getItem(STORAGE_KEY) || '[]')
           } catch {
             return []
           }
@@ -140,13 +141,13 @@ export function CartProvider({ children }) {
           skipNextPersist.current = true
           setItems(saved.data.items?.length ? fromApiItems(saved.data.items) : localItems)
           setVersion(saved.data.version)
-          localStorage.removeItem(STORAGE_KEY)
+          browserStorage.removeItem(STORAGE_KEY)
         } else {
           if (!active) return
           skipNextPersist.current = true
           setItems(fromApiItems(remoteItems))
           setVersion(remoteVersion)
-          localStorage.removeItem(STORAGE_KEY)
+          browserStorage.removeItem(STORAGE_KEY)
         }
       } catch {
         // Keep local cart if sync is unavailable.
@@ -239,7 +240,7 @@ export function CartProvider({ children }) {
         await persistRemote([], versionRef.current)
       }
     } else {
-      localStorage.removeItem(STORAGE_KEY)
+      browserStorage.removeItem(STORAGE_KEY)
     }
   }
 

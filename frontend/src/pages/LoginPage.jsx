@@ -1,23 +1,35 @@
-import { useState } from 'react'
-import { Link, Navigate, useLocation } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AuthLayout from '../components/auth/AuthLayout'
 import AuthPasswordField from '../components/auth/AuthPasswordField'
 import GoogleSignInButton from '../components/auth/GoogleSignInButton'
 import Button from '../components/ui/Button'
 import { safeRedirectPath } from '../utils/safeRedirect'
+import { clearAuthRedirect, peekAuthRedirect } from '../utils/purchaseIntent'
 
 const inputClass = 'auth-input'
 
 export default function LoginPage() {
-  const { login, loginWithGoogle, isAuthenticated, clerkEnabled } = useAuth()
+  const { login, loginWithGoogle, isAuthenticated, googleEnabled, authError, clearAuthError } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState(location.state?.oauthError || '')
   const [loading, setLoading] = useState(false)
 
+  // Router state is lost across a full-page Google redirect; RequireAuth and
+  // checkout also save the destination in sessionStorage.
+  const [savedRedirect] = useState(() => peekAuthRedirect())
+  const shownError = error || authError
+  const signedOut = new URLSearchParams(location.search).get('signedOut') === '1'
+
+  useEffect(() => {
+    if (isAuthenticated) clearAuthRedirect()
+  }, [isAuthenticated])
+
   if (isAuthenticated) {
-    const dest = safeRedirectPath(location.state?.from, '/')
+    const dest = safeRedirectPath(location.state?.from || savedRedirect, '/')
     return <Navigate to={dest} replace />
   }
 
@@ -25,9 +37,16 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
     setError('')
+    clearAuthError()
     try {
       await login(form.email.trim(), form.password)
     } catch (err) {
+      if (err.code === 'email_unverified') {
+        navigate(`/verify-email?email=${encodeURIComponent(err.data?.email || form.email.trim())}`, {
+          replace: true,
+        })
+        return
+      }
       setError(err.message || 'Sign in failed')
     } finally {
       setLoading(false)
@@ -51,6 +70,12 @@ export default function LoginPage() {
         </p>
       }
     >
+      {signedOut && !shownError ? (
+        <p role="status" className="mb-4 rounded-[12px] border border-volt/30 bg-volt/10 px-3 py-2 text-sm text-snow/90">
+          You have been signed out. Sign in again or{' '}
+          <Link to="/signup" className="text-volt font-semibold hover:underline">create an account</Link>.
+        </p>
+      ) : null}
       <form onSubmit={onSubmit} className="space-y-4">
         <div>
           <label htmlFor="login-email" className="block text-sm font-medium text-snow/90 mb-1.5">
@@ -79,7 +104,7 @@ export default function LoginPage() {
 
         <Link className="block text-sm text-volt font-semibold" to="/forgot-password">Forgot password?</Link>
 
-        {error ? <p role="alert" className="text-sm text-red-400">{error}</p> : null}
+        {shownError ? <p role="alert" className="text-sm text-red-400">{shownError}</p> : null}
 
         <Button type="submit" className="w-full rounded-[16px]" size="lg" disabled={loading}>
           {loading ? 'Signing in...' : 'Sign In'}
@@ -92,14 +117,17 @@ export default function LoginPage() {
         <div className="h-px flex-1 bg-silver/20" />
       </div>
 
-      {clerkEnabled ? (
+      {googleEnabled ? (
         <GoogleSignInButton
           disabled={loading}
           onClick={async () => {
             setLoading(true)
             setError('')
+            clearAuthError()
             try {
-              await loginWithGoogle()
+              const user = await loginWithGoogle()
+              // null => browser redirected to Google (Safari / popup blocked).
+              if (!user) return
             } catch (err) {
               setError(err.message || 'Google sign-in failed')
               setLoading(false)
@@ -107,7 +135,7 @@ export default function LoginPage() {
           }}
         />
       ) : (
-        <p className="text-sm text-muted text-center">Google sign-in requires Clerk configuration.</p>
+        <p className="text-sm text-muted text-center">Google sign-in is currently unavailable. Use email and password.</p>
       )}
     </AuthLayout>
   )

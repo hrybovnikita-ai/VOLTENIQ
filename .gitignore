@@ -18,3 +18,5 @@ __pycache__/
 *.pyc
 .ai/
 .vercel
+backups/
+scripts/.tmp/

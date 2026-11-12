@@ -6,6 +6,7 @@ export function safeRedirectPath(value, fallback = '/') {
   if (typeof value !== 'string') return fallback
   const path = value.trim()
   if (!path.startsWith('/') || path.startsWith('//') || path.includes('\\')) return fallback
+  if (Array.from(path).some(char => char.charCodeAt(0) < 32)) return fallback
   if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(path)) return fallback
   return path
 }

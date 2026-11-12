@@ -17,6 +17,8 @@ export async function verifyFirebaseIdToken(idToken) {
   try {
     const { payload } = await jwtVerify(idToken, JWKS, {
       algorithms: ['RS256'],
+      // Tolerate small clock skew between Google's token servers and ours.
+      clockTolerance: 60,
       requiredClaims: ['exp', 'iat', 'sub'],
       audience: config.firebaseProjectId,
       issuer: `https://securetoken.google.com/${config.firebaseProjectId}`,
@@ -28,7 +30,10 @@ export async function verifyFirebaseIdToken(idToken) {
       throw err;
     }
 
+    const googleId = payload.firebase?.identities?.['google.com']?.[0];
+    if (typeof googleId !== 'string' || !googleId) throw Object.assign(new Error('Google identity missing'), { status: 401 });
     return {
+      googleId,
       uid: String(payload.sub),
       email: String(payload.email).toLowerCase(),
       name: payload.name ? String(payload.name) : '',

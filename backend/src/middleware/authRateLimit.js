@@ -1,10 +1,4 @@
-import rateLimit from 'express-rate-limit';
-
-function clientKey(req) {
-  return String(req.ip || req.headers['x-forwarded-for'] || 'unknown')
-    .split(',')[0]
-    .trim();
-}
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
 /** Shared factory so auth routes get consistent 429 JSON. */
 function createAuthLimiter({ windowMs, max, message }) {
@@ -13,10 +7,15 @@ function createAuthLimiter({ windowMs, max, message }) {
     max,
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: clientKey,
+    keyGenerator: (req) => {
+      const forwarded = String(req.headers['x-forwarded-for'] || '')
+        .split(',')[0]
+        .trim();
+      return ipKeyGenerator(forwarded || req.ip || '127.0.0.1');
+    },
     message: { success: false, message },
-    // Vercel / local trust proxy is already enabled on the app.
-    validate: { trustProxy: false },
+    // App already sets trust proxy; disable IPv6 static check noise after using ipKeyGenerator.
+    validate: { trustProxy: false, keyGeneratorIpFallback: false },
   });
 }
 

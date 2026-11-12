@@ -1,33 +1,64 @@
 import bcrypt from 'bcryptjs';
 import { prisma } from '../db/prisma.js';
+import { consumeAuthToken, sendPasswordReset } from './authTokenService.js';
+import { isMailConfigured } from './mailService.js';
+import { revokeAllUserSessions } from './sessionService.js';
 
-export async function resetPasswordWithEmailLink(email, code, password) {
-  const key = process.env.FIREBASE_WEB_API_KEY;
-  if (!key) throw Object.assign(new Error('Recovery is unavailable'), { status: 503 });
-  // Firebase authenticates the mailbox and consumes the one-time code.
-  const url = new URL('https://identitytoolkit.googleapis.com/v1/accounts:signInWithEmailLink');
-  url.searchParams.set('key', key);
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, oobCode: code }),
-    signal: AbortSignal.timeout(10000),
+/**
+ * Request a password reset email. Fails closed if mail is not configured.
+ * Always returns a generic shape to the route for eligible handling.
+ */
+export async function requestPasswordReset(email) {
+  if (!isMailConfigured()) {
+    const err = new Error('Email delivery is not configured. Set RESEND_API_KEY and MAIL_FROM.');
+    err.status = 503;
+    err.code = 'mail_not_configured';
+    throw err;
+  }
+
+  const normalized = String(email || '').toLowerCase().trim();
+  const user = await prisma.user.findUnique({ where: { email: normalized } });
+
+  // Do not reveal whether the account exists — but still require mail to be configured.
+  if (!user) {
+    return { sent: false, reason: 'not_found' };
+  }
+
+  // Google-only accounts cannot use password reset.
+  if (!user.password || user.password === 'GOOGLE_ONLY' || user.password.startsWith('GOOGLE_ONLY')) {
+    return { sent: false, reason: 'google_only' };
+  }
+
+  const result = await sendPasswordReset(user);
+  return { sent: true, ...result };
+}
+
+export async function resetPasswordWithToken(email, token, password) {
+  const user = await consumeAuthToken({
+    email,
+    token,
+    type: 'PASSWORD_RESET',
   });
-  if (!response.ok) {
-    if (response.status >= 500) throw Object.assign(new Error('Provider unavailable'), { status: 503 });
-    throw Object.assign(new Error('This recovery link could not be verified. Request a new link for this email.'), { status: 400 });
+
+  if (!user.password || user.password === 'GOOGLE_ONLY' || user.password.startsWith('GOOGLE_ONLY')) {
+    const err = new Error('No password account is available for this email. If you registered with Google, use Continue with Google.');
+    err.status = 400;
+    throw err;
   }
-  const identity = await response.json();
-  if (!identity.email || identity.email.toLowerCase() !== email.toLowerCase()) {
-    throw Object.assign(new Error('Recovery email does not match.'), { status: 400 });
-  }
-  const hashed = await bcrypt.hash(password, 10);
-  await prisma.$transaction(async tx => {
-    const user = await tx.user.findUnique({ where: { email: email.toLowerCase() } });
-    if (!user || user.googleId || user.firebaseUid) {
-      throw Object.assign(new Error('No password account is available for this email. If you registered with Google, use Continue with Google.'), { status: 400 });
-    }
-    await tx.user.update({ where: { id: user.id }, data: { password: hashed } });
+
+  const hashed = await bcrypt.hash(password, 12);
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashed,
+        // Completing reset via mailbox ownership also verifies the email.
+        emailVerifiedAt: user.emailVerifiedAt || new Date(),
+      },
+    });
     await tx.session.deleteMany({ where: { userId: user.id } });
   });
+
+  await revokeAllUserSessions(user.id);
+  return { email: user.email };
 }

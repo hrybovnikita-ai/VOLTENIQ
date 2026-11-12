@@ -103,7 +103,7 @@ export default function FeaturedShowcase({ products = [] }) {
     setOffset(drag.origin - delta)
   }
 
-  const endDrag = (event) => {
+  const endDrag = () => {
     const drag = dragRef.current
     if (!drag.active) return
     drag.active = false
