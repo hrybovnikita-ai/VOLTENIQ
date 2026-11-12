@@ -65,6 +65,36 @@ async function request(method, path, { params, data } = {}) {
   return response.data
 }
 
+/**
+ * POST that survives the page navigating away (fetch keepalive), used for
+ * logout: sign-out hard-navigates to /login on a deadline, and an XHR still in
+ * flight at that moment would be aborted. Errors match the axios shape.
+ */
+async function keepalivePost(path) {
+  if (typeof fetch !== 'function') return request('post', path)
+  let response
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      method: 'POST',
+      credentials: 'include',
+      keepalive: true,
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    })
+  } catch {
+    const networkError = new Error('Cannot reach the VOLTENIQ API. Please check your connection and try again.')
+    networkError.status = 0
+    throw networkError
+  }
+  const payload = await response.json().catch(() => null)
+  if (!response.ok) {
+    const apiError = new Error(payload?.message || 'The server could not complete the request. Please try again.')
+    apiError.status = response.status
+    throw apiError
+  }
+  return payload
+}
+
 function cleanParams(params = {}) {
   return Object.fromEntries(
     Object.entries(params).filter(([, v]) => v !== undefined && v !== '' && v !== null)
@@ -89,7 +119,7 @@ export const api = {
   resetPassword: (body) => request('post', '/auth/reset-password', { data: body }),
   verifyEmail: (body) => request('post', '/auth/verify-email', { data: body }),
   resendVerification: (body) => request('post', '/auth/resend-verification', { data: body }),
-  logout: () => request('post', '/auth/logout'),
+  logout: () => keepalivePost('/auth/logout'),
   register: (body) => request('post', '/auth/register', { data: body }),
   firebaseSession: (body) => request('post', '/auth/firebase', { data: body }),
   clerkSession: (body) => request('post', '/auth/clerk', { data: body }),

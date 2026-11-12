@@ -62,7 +62,7 @@ test('signs out: server, providers, state, storage, then hard redirect to /login
     providers: [async () => { providerCalls += 1 }],
   })
   const result = await performSignOut(options)
-  assert.deepEqual(result, { server: 'ok', providers: ['ok'] })
+  assert.deepEqual(result, { server: 'ok', providers: ['ok'], deadline: false })
   assert.equal(calls.server, 1)
   assert.equal(providerCalls, 1)
   assert.equal(calls.cleared, 1)

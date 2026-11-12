@@ -147,25 +147,38 @@ async function runSignOut({
   timeoutMs = 6000,
   providerTimeoutMs = 3000,
   attempts = 2,
+  // Hard cap from tap to redirect. Retries and provider calls can otherwise
+  // add up to ~15 s on a flaky tablet/WebView connection, which reads as
+  // "Sign Out does nothing". The logout request is sent with keepalive, and
+  // the pending marker makes the next page load finish it if it was cut off.
+  deadlineMs = 5000,
 }) {
-  const outcome = { server: 'failed', providers: [] }
+  const outcome = { server: 'failed', providers: [], deadline: false }
+  let deadlineTimer = null
   try {
     markLogoutPending(local)
     try { clearState() } catch { /* UI state is rebuilt by the redirect */ }
 
-    // Server first: a provider (Clerk) may navigate the page, which would
-    // abort an in-flight logout request.
-    const server = await revokeServerSession(serverLogout, { timeoutMs, attempts })
-    outcome.server = server.ok ? 'ok' : 'failed'
-    if (server.ok) clearLogoutPending(local)
+    const work = (async () => {
+      // Server first: a provider (Clerk) may navigate the page, which would
+      // abort an in-flight logout request.
+      const server = await revokeServerSession(serverLogout, { timeoutMs, attempts })
+      outcome.server = server.ok ? 'ok' : 'failed'
+      if (server.ok) clearLogoutPending(local)
 
-    outcome.providers = await Promise.all(providers.map((signOut, index) => (
-      withTimeout(signOut, providerTimeoutMs, `provider ${index}`)
-        .then(() => 'ok', (error) => (error?.code === 'timeout' ? 'timeout' : 'failed'))
-    )))
+      outcome.providers = await Promise.all(providers.map((signOut, index) => (
+        withTimeout(signOut, providerTimeoutMs, `provider ${index}`)
+          .then(() => 'ok', (error) => (error?.code === 'timeout' ? 'timeout' : 'failed'))
+      )))
+    })()
+    const deadline = new Promise((resolve) => {
+      deadlineTimer = setTimeout(() => { outcome.deadline = true; resolve() }, deadlineMs)
+    })
+    await Promise.race([work, deadline])
   } catch {
     // Fall through: the redirect below must always run.
   } finally {
+    clearTimeout(deadlineTimer)
     clearAuthStorage({ local, session })
     try { redirect(redirectTo) } catch { /* nothing else to do */ }
   }
@@ -194,4 +207,75 @@ export async function restoreStoreSession({
     }
   }
   return restore()
+}
+
+/**
+ * Run `callback` when the browser restores this page from the back/forward
+ * cache (iOS Safari, Telegram's WKWebView and Chrome all do this). A restored
+ * page keeps its old in-memory React state, so it can show a user who has
+ * since signed out, or a Sign Out button stuck on "Signing out…".
+ * @returns {() => void} detach
+ */
+export function onPageRestored(callback, win = typeof window !== 'undefined' ? window : undefined) {
+  if (!win?.addEventListener) return () => {}
+  const onPageShow = (event) => {
+    if (event?.persisted) callback(event)
+  }
+  win.addEventListener('pageshow', onPageShow)
+  return () => win.removeEventListener('pageshow', onPageShow)
+}
+
+/**
+ * Busy state for a Sign Out button that can never get stuck.
+ *
+ * `trigger(task)` runs `task` (or the `run` option). Double taps start one run. Once the run settles the page should already be
+ * leaving; if it is still here `settleMs` later (navigation blocked, slow
+ * WebView, restored from bfcache), the button is enabled again so another tap
+ * retries instead of doing nothing. `reset()` re-enables it immediately.
+ */
+export function createSignOutGuard({
+  run,
+  onBusyChange = () => {},
+  settleMs = 4000,
+  setTimer = (fn, ms) => setTimeout(fn, ms),
+  clearTimer = (id) => clearTimeout(id),
+} = {}) {
+  let busy = false
+  let timer = null
+  let generation = 0
+
+  const reset = () => {
+    generation += 1
+    if (timer !== null) clearTimer(timer)
+    timer = null
+    if (busy) {
+      busy = false
+      onBusyChange(false)
+    }
+  }
+
+  const trigger = (task = run) => {
+    if (busy) return false
+    busy = true
+    const mine = ++generation
+    onBusyChange(true)
+    let pending
+    try {
+      pending = Promise.resolve(task())
+    } catch (error) {
+      pending = Promise.reject(error)
+    }
+    pending
+      .catch(() => {})
+      .then(() => {
+        if (mine !== generation) return
+        timer = setTimer(() => {
+          timer = null
+          if (mine === generation) reset()
+        }, settleMs)
+      })
+    return true
+  }
+
+  return { trigger, reset, isBusy: () => busy }
 }

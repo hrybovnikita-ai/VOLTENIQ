@@ -85,3 +85,36 @@ test('detach removes every listener', () => {
   assert.equal(s.dismissed, 0)
   assert.equal(s.escaped, 0)
 })
+
+// Full tap sequences as tablets deliver them. With Pointer Events (iPadOS 13+,
+// including desktop-mode Safari that reports "Macintosh", Android Chrome) only
+// pointerdown is observed; the compatibility touch/mouse events that follow
+// must not close the menu either.
+test('iPad / iPadOS desktop-mode tap sequence on Sign Out never closes the menu', () => {
+  const s = setup({ pointer: true })
+  for (const type of ['pointerover', 'pointerdown', 'touchstart', 'pointerup', 'touchend', 'mousedown', 'mouseup', 'click']) {
+    s.press(type, s.signOutButton)
+  }
+  assert.equal(s.dismissed, 0)
+})
+
+test('Android tablet tap sequence outside (e.g. the hamburger) closes the menu exactly once', () => {
+  const s = setup({ pointer: true })
+  for (const type of ['pointerdown', 'touchstart', 'pointerup', 'touchend', 'mousedown', 'mouseup', 'click']) {
+    s.press(type, s.page)
+  }
+  assert.equal(s.dismissed, 1)
+})
+
+test('old WebView without Pointer Events: tap on Sign Out (touchstart + emulated mousedown) keeps it open', () => {
+  const s = setup({ pointer: false })
+  for (const type of ['touchstart', 'touchend', 'mousedown', 'mouseup', 'click']) s.press(type, s.signOutButton)
+  assert.equal(s.dismissed, 0)
+})
+
+test('a press on a text node inside the menu counts as inside', () => {
+  const s = setup({ pointer: true })
+  const label = { parent: s.signOutButton } // "Sign Out" text node
+  s.press('pointerdown', label)
+  assert.equal(s.dismissed, 0)
+})

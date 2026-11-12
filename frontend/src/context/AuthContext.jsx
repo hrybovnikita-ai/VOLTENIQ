@@ -1,4 +1,4 @@
-import { clearLogoutPending, performSignOut, restoreStoreSession, SIGNED_OUT_PATH } from '../lib/signOut'
+import { clearLogoutPending, onPageRestored, performSignOut, restoreStoreSession, SIGNED_OUT_PATH } from '../lib/signOut'
 import { browserStorage } from '../utils/browserStorage'
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useAuth as useClerkAuth, useClerk } from '@clerk/react'
@@ -19,12 +19,29 @@ function bootstrapCookieSession() {
   return restoreStoreSession({ logout: api.logout, restore: restoreCookieSession })
 }
 
+// iOS Safari, Telegram's WKWebView and Chrome restore pages from the
+// back/forward cache with their old React state. Re-check the cookie session
+// so a page from before a sign-out cannot show (or act as) a signed-in user.
+function useRevalidateOnPageRestore(revision, setUser) {
+  useEffect(() => onPageRestored(async () => {
+    const version = ++revision.current
+    let nextUser
+    try {
+      nextUser = await bootstrapCookieSession()
+    } catch {
+      nextUser = null
+    }
+    if (version === revision.current) setUser(nextUser)
+  }), [revision, setUser])
+}
+
 function ClerkAuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const revision = useRef(0)
   const clerk = useClerkAuth()
   const clerkSdk = useClerk()
+  useRevalidateOnPageRestore(revision, setUser)
 
   const saveSession = useCallback(({ data }) => {
     revision.current += 1
@@ -154,6 +171,7 @@ function LegacyAuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
   const [authError, setAuthError] = useState('')
   const revision = useRef(0)
+  useRevalidateOnPageRestore(revision, setUser)
 
   const saveSession = useCallback(({ data }) => {
     revision.current += 1

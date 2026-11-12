@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import {
   Menu,
@@ -18,6 +18,7 @@ import { useCompare } from '../../context/CompareContext'
 import { useAuth } from '../../context/AuthContext'
 import SearchAutocomplete from '../search/SearchAutocomplete'
 import { attachOutsideDismiss } from '../../lib/outsideDismiss'
+import { createSignOutGuard, onPageRestored } from '../../lib/signOut'
 
 const links = [
   { to: '/catalog', label: 'Catalog' },
@@ -39,10 +40,20 @@ function initials(user) {
 const menuItemClass =
   'block w-full rounded-lg p-2 text-left min-h-11 flex items-center hover:bg-volt/10 hover:text-volt focus-visible:bg-volt/10 focus-visible:outline-none'
 
-function AccountMenu({ user, signingOut, onSignOut }) {
+function AccountMenu({ user, signingOut, onSignOut, onOpen }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const rootRef = useRef(null)
   const toggleRef = useRef(null)
+
+  // Only one header menu at a time: on tablets (below xl) the avatar menu and
+  // the hamburger panel are both reachable and would otherwise stack.
+  useEffect(() => {
+    if (menuOpen) onOpen?.()
+  }, [menuOpen, onOpen])
+
+  // A page restored from the back/forward cache must not come back with the
+  // dropdown still open.
+  useEffect(() => onPageRestored(() => setMenuOpen(false)), [])
 
   useEffect(() => {
     if (!menuOpen) return undefined
@@ -115,22 +126,34 @@ function AccountMenu({ user, signingOut, onSignOut }) {
 
 export default function Navbar() {
   const [open, setOpen] = useState(false)
+  const closeNav = useCallback(() => setOpen(false), [])
   const [signingOut, setSigningOut] = useState(false)
-  const signOutStarted = useRef(false)
   const { theme, toggleTheme } = useTheme()
   const { count } = useCart()
   const { ids: favIds } = useFavorites()
   const { ids: compareIds } = useCompare()
   const { user, isAdmin, logout, loading: authLoading } = useAuth()
 
-  // logout() never rejects and always hard-navigates to /login, so there is
-  // no error path here. The ref blocks double taps before React re-renders.
+  // logout() never rejects and always hard-navigates to /login. The guard
+  // blocks double taps before React re-renders, and, unlike a one-way flag,
+  // re-enables the button if this document is still alive afterwards
+  // (bfcache restore, blocked navigation, signing in again in the same tab),
+  // so a later tap always works.
+  const [signOutGuard] = useState(() => createSignOutGuard({ onBusyChange: setSigningOut }))
   const handleSignOut = () => {
-    if (signOutStarted.current) return
-    signOutStarted.current = true
-    setSigningOut(true)
-    logout()
+    signOutGuard.trigger(logout)
   }
+
+  useEffect(() => onPageRestored(() => {
+    signOutGuard.reset()
+    setOpen(false)
+  }), [signOutGuard])
+
+  // A new signed-in user in this document always gets a working button.
+  const userId = user?.id ?? null
+  useEffect(() => {
+    if (userId) signOutGuard.reset()
+  }, [userId, signOutGuard])
 
   useEffect(() => {
     const escape = (event) => {
@@ -247,7 +270,7 @@ export default function Navbar() {
                   aria-hidden="true"
                 />
               ) : user ? (
-                <AccountMenu user={user} signingOut={signingOut} onSignOut={handleSignOut} />
+                <AccountMenu user={user} signingOut={signingOut} onSignOut={handleSignOut} onOpen={closeNav} />
               ) : (
                 <div className="hidden sm:flex items-center gap-1">
                   <Link
