@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "test:checkout": "node --test src/utils/demoPayment.test.js",
     "test:assistant": "node --test src/utils/assistantBrain.test.js src/utils/chatHistory.test.js",
-    "test": "node --test src/utils/demoPayment.test.js src/utils/assistantBrain.test.js src/utils/chatHistory.test.js src/utils/safeRedirect.test.js src/lib/firebaseRedirect.test.js src/api/resolveApiUrl.test.js src/context/authSession.test.js src/lib/clerkProxy.test.js src/utils/purchaseIntent.test.js"
+    "test": "node --test src/utils/demoPayment.test.js src/utils/assistantBrain.test.js src/utils/chatHistory.test.js src/utils/safeRedirect.test.js src/lib/firebaseRedirect.test.js src/api/resolveApiUrl.test.js src/context/authSession.test.js src/lib/signOut.test.js src/lib/outsideDismiss.test.js src/lib/clerkProxy.test.js src/utils/purchaseIntent.test.js"
   },
   "dependencies": {
     "@clerk/react": "^6.18.6",

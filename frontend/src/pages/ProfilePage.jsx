@@ -64,15 +64,8 @@ export default function ProfilePage() {
     setSessions(res.data.sessions || [])
   }
 
-  const handleLogout = async () => {
-    setError('')
-    try {
-      await logout()
-      navigate('/login', { replace: true })
-    } catch (err) {
-      setError(err.message || 'Sign-out failed. Please try again.')
-    }
-  }
+  // Never rejects; clears every session layer and hard-navigates to /login.
+  const handleLogout = () => logout()
 
   const revokeSession = async (id) => {
     setSessionsBusy(true)
@@ -178,7 +171,7 @@ export default function ProfilePage() {
               Admin dashboard
             </Button>
           )}
-          <Button variant="ghost" onClick={handleLogout}>
+          <Button type="button" variant="ghost" onClick={handleLogout}>
             Log out
           </Button>
         </div>

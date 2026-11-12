@@ -1,4 +1,4 @@
-import { clearStoreSession } from './clearStoreSession'
+import { clearLogoutPending, performSignOut, restoreStoreSession, SIGNED_OUT_PATH } from '../lib/signOut'
 import { browserStorage } from '../utils/browserStorage'
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useAuth as useClerkAuth, useClerk } from '@clerk/react'
@@ -14,6 +14,11 @@ async function restoreCookieSession() {
   return data.user || null
 }
 
+// Finishes an interrupted sign-out before trusting the cookie session.
+function bootstrapCookieSession() {
+  return restoreStoreSession({ logout: api.logout, restore: restoreCookieSession })
+}
+
 function ClerkAuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -23,6 +28,7 @@ function ClerkAuthProvider({ children }) {
 
   const saveSession = useCallback(({ data }) => {
     revision.current += 1
+    clearLogoutPending()
     setUser(data.user)
     return data.user
   }, [])
@@ -41,7 +47,7 @@ function ClerkAuthProvider({ children }) {
 
     async function bootstrap() {
       try {
-        const nextUser = await restoreCookieSession()
+        const nextUser = await bootstrapCookieSession()
         if (active && version === revision.current) setUser(nextUser)
       } catch {
         if (active && version === revision.current) setUser(null)
@@ -101,9 +107,15 @@ function ClerkAuthProvider({ children }) {
     return null
   }
 
-  async function logout() {
-    await clearStoreSession({ revision, setUser, logout: api.logout, restore: restoreCookieSession })
-    if (clerk.isSignedIn) await clerkSdk.signOut({ redirectUrl: window.location.origin })
+  function logout() {
+    return performSignOut({
+      serverLogout: api.logout,
+      providers: clerk.isSignedIn ? [() => clerkSdk.signOut({ redirectUrl: SIGNED_OUT_PATH })] : [],
+      clearState: () => {
+        revision.current += 1
+        setUser(null)
+      },
+    })
   }
 
   async function updateProfileInfo(payload) {
@@ -145,6 +157,7 @@ function LegacyAuthProvider({ children }) {
 
   const saveSession = useCallback(({ data }) => {
     revision.current += 1
+    clearLogoutPending()
     setAuthError('')
     setUser(data.user)
     return data.user
@@ -178,7 +191,7 @@ function LegacyAuthProvider({ children }) {
           }
         }
 
-        const nextUser = await restoreCookieSession()
+        const nextUser = await bootstrapCookieSession()
         if (active && version === revision.current) setUser(nextUser)
       } catch {
         if (active && version === revision.current) setUser(null)
@@ -231,10 +244,15 @@ function LegacyAuthProvider({ children }) {
           if (!idToken) return null
           return saveSession(await api.firebaseSession({ idToken }))
         },
-        logout: async () => {
-          await clearStoreSession({ revision, setUser, logout: api.logout, restore: restoreCookieSession })
-          await firebaseSignOut()
-        },
+        // Never rejects; always ends on /login (see lib/signOut.js).
+        logout: () => performSignOut({
+          serverLogout: api.logout,
+          providers: firebaseConfigured ? [firebaseSignOut] : [],
+          clearState: () => {
+            revision.current += 1
+            setUser(null)
+          },
+        }),
         updateProfile: async (payload) => {
           const { data } = await api.updateProfile(payload)
           setUser(data.user)

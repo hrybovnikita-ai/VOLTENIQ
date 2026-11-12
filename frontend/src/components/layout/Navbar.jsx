@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Link, NavLink, useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, NavLink } from 'react-router-dom'
 import {
   Menu,
   X,
@@ -17,6 +17,7 @@ import { useFavorites } from '../../context/FavoritesContext'
 import { useCompare } from '../../context/CompareContext'
 import { useAuth } from '../../context/AuthContext'
 import SearchAutocomplete from '../search/SearchAutocomplete'
+import { attachOutsideDismiss } from '../../lib/outsideDismiss'
 
 const links = [
   { to: '/catalog', label: 'Catalog' },
@@ -35,30 +36,100 @@ function initials(user) {
   return (name || 'U').slice(0, 1).toUpperCase()
 }
 
+const menuItemClass =
+  'block w-full rounded-lg p-2 text-left min-h-11 flex items-center hover:bg-volt/10 hover:text-volt focus-visible:bg-volt/10 focus-visible:outline-none'
+
+function AccountMenu({ user, signingOut, onSignOut }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const rootRef = useRef(null)
+  const toggleRef = useRef(null)
+
+  useEffect(() => {
+    if (!menuOpen) return undefined
+    return attachOutsideDismiss({
+      doc: document,
+      isInside: (target) => Boolean(rootRef.current?.contains(target)),
+      onDismiss: () => setMenuOpen(false),
+      onEscape: () => {
+        setMenuOpen(false)
+        toggleRef.current?.focus()
+      },
+    })
+  }, [menuOpen])
+
+  const closeMenu = () => setMenuOpen(false)
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        ref={toggleRef}
+        type="button"
+        aria-label="Account menu"
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        aria-controls="account-menu"
+        onClick={() => setMenuOpen((value) => !value)}
+        className="touch-manipulation flex cursor-pointer items-center gap-2 rounded-full border border-silver/15 bg-graphite/90 py-1 pl-1 pr-2.5 text-volt"
+      >
+        <span className="grid h-8 w-8 place-items-center overflow-hidden rounded-full bg-ink text-sm font-bold text-volt">
+          {user.avatarUrl ? (
+            <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            initials(user)
+          )}
+        </span>
+        <span className="hidden max-w-[7.5rem] truncate text-xs font-semibold text-snow/90 lg:inline">
+          {displayName(user)}
+        </span>
+      </button>
+      {menuOpen && (
+        <div id="account-menu" className="glass-menu account-menu right-0 top-12 z-[60] w-56 p-2">
+          <div className="border-b border-silver/15 px-2 pb-2 mb-1">
+            <p className="truncate text-sm font-semibold text-snow">{displayName(user)}</p>
+            <p className="truncate text-xs text-muted">{user.email}</p>
+          </div>
+          <Link to="/profile" className={menuItemClass} onClick={closeMenu}>
+            My Profile
+          </Link>
+          <Link to="/profile#orders" className={menuItemClass} onClick={closeMenu}>
+            My Orders
+          </Link>
+          <Link to="/profile#settings" className={menuItemClass} onClick={closeMenu}>
+            Settings
+          </Link>
+          <button
+            type="button"
+            data-testid="sign-out"
+            className={`${menuItemClass} touch-manipulation cursor-pointer disabled:opacity-60`}
+            disabled={signingOut}
+            aria-busy={signingOut}
+            onClick={onSignOut}
+          >
+            {signingOut ? 'Signing out…' : 'Sign Out'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Navbar() {
   const [open, setOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
-  const [logoutError, setLogoutError] = useState('')
-  const navigate = useNavigate()
+  const signOutStarted = useRef(false)
   const { theme, toggleTheme } = useTheme()
   const { count } = useCart()
   const { ids: favIds } = useFavorites()
   const { ids: compareIds } = useCompare()
   const { user, isAdmin, logout, loading: authLoading } = useAuth()
 
-  const handleSignOut = async () => {
-    if (signingOut) return
-    setLogoutError('')
+  // logout() never rejects and always hard-navigates to /login, so there is
+  // no error path here. The ref blocks double taps before React re-renders.
+  const handleSignOut = () => {
+    if (signOutStarted.current) return
+    signOutStarted.current = true
     setSigningOut(true)
-    try {
-      await logout()
-      setOpen(false)
-      navigate('/login', { replace: true })
-    } catch (error) {
-      setLogoutError(error.message || 'Sign-out failed. Please try again.')
-    } finally {
-      setSigningOut(false)
-    }
+    logout()
   }
 
   useEffect(() => {
@@ -93,14 +164,9 @@ export default function Navbar() {
     'items-center justify-center rounded-[12px] p-2.5 min-h-11 min-w-11 border border-transparent hover:border-silver/20 hover:bg-white/30 dark:hover:bg-white/5 transition'
 
   const close = () => setOpen(false)
-  const closeDetails = (event) => {
-    const details = event.currentTarget.closest('details')
-    if (details) details.open = false
-  }
 
   return (
     <header className="sticky top-0 z-50">
-      {logoutError && <p role="alert">{logoutError}</p>}
       <div className="glass-nav backdrop-blur-xl">
         <div className="container-shell">
           <div className="flex h-14 sm:h-16 items-center gap-2 sm:gap-3 min-w-0">
@@ -181,51 +247,7 @@ export default function Navbar() {
                   aria-hidden="true"
                 />
               ) : user ? (
-                <details
-                  className="relative"
-                  onBlur={(e) => {
-                    if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.open = false
-                  }}
-                >
-                  <summary
-                    aria-label="Account menu"
-                    className="flex cursor-pointer list-none items-center gap-2 rounded-full border border-silver/15 bg-graphite/90 py-1 pl-1 pr-2.5 text-volt [&::-webkit-details-marker]:hidden"
-                  >
-                    <span className="grid h-8 w-8 place-items-center overflow-hidden rounded-full bg-ink text-sm font-bold text-volt">
-                      {user.avatarUrl ? (
-                        <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
-                      ) : (
-                        initials(user)
-                      )}
-                    </span>
-                    <span className="hidden max-w-[7.5rem] truncate text-xs font-semibold text-snow/90 lg:inline">
-                      {displayName(user)}
-                    </span>
-                  </summary>
-                  <div className="glass-menu absolute right-0 top-12 z-50 w-56 p-2">
-                    <div className="border-b border-silver/15 px-2 pb-2 mb-1">
-                      <p className="truncate text-sm font-semibold text-snow">{displayName(user)}</p>
-                      <p className="truncate text-xs text-muted">{user.email}</p>
-                    </div>
-                    <Link to="/profile" className="block rounded-lg p-2 hover:bg-volt/10 hover:text-volt" onClick={closeDetails}>
-                      My Profile
-                    </Link>
-                    <Link to="/profile#orders" className="block rounded-lg p-2 hover:bg-volt/10 hover:text-volt" onClick={closeDetails}>
-                      My Orders
-                    </Link>
-                    <Link to="/profile#settings" className="block rounded-lg p-2 hover:bg-volt/10 hover:text-volt" onClick={closeDetails}>
-                      Settings
-                    </Link>
-                    <button
-                      type="button"
-                      className="w-full rounded-lg p-2 text-left hover:bg-volt/10 hover:text-volt disabled:opacity-60"
-                      disabled={signingOut}
-                      onClick={handleSignOut}
-                    >
-                      {signingOut ? 'Signing out…' : 'Sign Out'}
-                    </button>
-                  </div>
-                </details>
+                <AccountMenu user={user} signingOut={signingOut} onSignOut={handleSignOut} />
               ) : (
                 <div className="hidden sm:flex items-center gap-1">
                   <Link
@@ -321,11 +343,11 @@ export default function Navbar() {
                   {user && (
                     <button
                       type="button"
-                      className="text-left text-[0.95rem] font-medium text-muted hover:text-volt min-h-11 disabled:opacity-60"
+                      data-testid="mobile-sign-out"
+                      className="touch-manipulation cursor-pointer text-left text-[0.95rem] font-medium text-muted hover:text-volt min-h-11 disabled:opacity-60"
                       disabled={signingOut}
-                      onClick={async () => {
-                        await handleSignOut()
-                      }}
+                      aria-busy={signingOut}
+                      onClick={handleSignOut}
                     >
                       {signingOut ? 'Signing out…' : 'Sign Out'}
                     </button>

@@ -101,12 +101,15 @@ function clearSessionCookie(res, name) {
 
 export async function endSession(req, res) {
   const id = sessionId(req);
-  if (id) await prisma.session.deleteMany({ where: { id } });
+  // Expire the cookies first so the browser drops them even if the database
+  // call below fails; the error response still carries these Set-Cookie headers.
   clearSessionCookie(res, SESSION_COOKIE_NAME);
   // Also clear the alternate name in case an older deploy left a stale cookie.
   clearSessionCookie(res, SESSION_COOKIE_NAME === '__Host-volteniq_session'
     ? 'volteniq_session'
     : '__Host-volteniq_session');
+  // Deletes only this browser's session row; users and orders are untouched.
+  if (id) await prisma.session.deleteMany({ where: { id } });
 }
 
 /** Revoke every store session for a user (password change / recovery). */

@@ -22,6 +22,7 @@ export default function LoginPage() {
   // checkout also save the destination in sessionStorage.
   const [savedRedirect] = useState(() => peekAuthRedirect())
   const shownError = error || authError
+  const signedOut = new URLSearchParams(location.search).get('signedOut') === '1'
 
   useEffect(() => {
     if (isAuthenticated) clearAuthRedirect()
@@ -69,6 +70,12 @@ export default function LoginPage() {
         </p>
       }
     >
+      {signedOut && !shownError ? (
+        <p role="status" className="mb-4 rounded-[12px] border border-volt/30 bg-volt/10 px-3 py-2 text-sm text-snow/90">
+          You have been signed out. Sign in again or{' '}
+          <Link to="/signup" className="text-volt font-semibold hover:underline">create an account</Link>.
+        </p>
+      ) : null}
       <form onSubmit={onSubmit} className="space-y-4">
         <div>
           <label htmlFor="login-email" className="block text-sm font-medium text-snow/90 mb-1.5">

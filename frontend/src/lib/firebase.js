@@ -162,8 +162,12 @@ export async function googleIdToken() {
   }
 }
 
-/** Best-effort: drop any Firebase browser state on store sign-out. */
+/**
+ * Drop any Firebase browser state on store sign-out. Callers bound this with a
+ * timeout: Firebase persistence can stall in some WebViews. Initializes Auth
+ * when needed so a user persisted by an earlier page load is cleared too.
+ */
 export async function firebaseSignOut() {
-  if (!firebaseConfigured || !auth) return
-  await signOut(auth).catch(() => {})
+  if (!firebaseConfigured) return
+  await signOut(getFirebaseAuth())
 }
